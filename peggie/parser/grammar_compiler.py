@@ -33,12 +33,19 @@ class RuleDefinedMultipleTimesError(GrammarCompileError):
     """Name redefined in a grammar."""
 
 
+class GrammarNotWellFormedError(GrammarCompileError):
+    """The grammar is not well formed."""
+
+
 def assert_is_rule(parse_tree: Any) -> Rule:
     assert isinstance(parse_tree, Rule)
     return parse_tree
 
 
 def compile_grammar(parse_tree: Rule) -> Grammar:
+    """
+    Compile a grammar from a parse tree produced using the PEG meta grammar.
+    """
     assert parse_tree.name == "Grammar"
 
     assert isinstance(parse_tree.value, Concat)
@@ -60,7 +67,14 @@ def compile_grammar(parse_tree: Rule) -> Grammar:
         rules[name] = expression
 
     assert start_rule is not None
-    return Grammar(rules=rules, start_rule=start_rule)
+
+    grammar = Grammar(rules=rules, start_rule=start_rule)
+
+    well_formed = grammar.is_well_formed()
+    if not well_formed:
+        raise GrammarNotWellFormedError(well_formed)
+
+    return grammar
 
 
 def compile_definition(parse_tree: Rule) -> Tuple[str, Expr]:

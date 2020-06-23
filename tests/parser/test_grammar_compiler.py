@@ -17,6 +17,7 @@ from peggie.parser.parser import (
     AltExpr,
     ConcatExpr,
     Rule,
+    LeftRecursion,
 )
 
 from peggie.parser.meta_grammar import (
@@ -27,6 +28,7 @@ from peggie.parser.meta_grammar import (
 from peggie.parser.grammar_compiler import (
     compile_grammar,
     RuleDefinedMultipleTimesError,
+    GrammarNotWellFormedError,
 )
 
 
@@ -42,7 +44,7 @@ class TestCompileGrammar:
             self.parse_and_compile_grammar("name <- .\nname <- .")
 
     def test_start_rule_is_first_rule(self) -> None:
-        g = self.parse_and_compile_grammar("a <- ay\nb <- bee\nc <- see")
+        g = self.parse_and_compile_grammar("a <- 'ay'\nb <- 'bee'\nc <- 'see'")
         assert g.start_rule == "a"
         assert set(g.rules) == set(["a", "b", "c"])
 
@@ -118,8 +120,15 @@ class TestCompileGrammar:
         ],
     )
     def test_expression(self, rule: str, exp_expr: Expr) -> None:
-        g = self.parse_and_compile_grammar("start <- {}".format(rule))
+        g = self.parse_and_compile_grammar(
+            "start <- {}\nrule<-.\na<-.\nb<-.\nc<-.\nd<-.\nr<-.".format(rule)
+        )
         assert g.rules["start"] == exp_expr
+
+    def test_well_formedness_enforced(self) -> None:
+        with pytest.raises(GrammarNotWellFormedError) as exc_info:
+            self.parse_and_compile_grammar("start <- start")
+        exc_info.value.args == (LeftRecursion("start"),)
 
 
 def test_self_hosting() -> None:
