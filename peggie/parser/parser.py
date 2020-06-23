@@ -5,9 +5,14 @@ A Packrat Parsing Expression Grammar (PEG) Parser implementation.
 
 from enum import Enum
 
+from collections import defaultdict
+
 from dataclasses import dataclass, replace
 
+from textwrap import indent
+
 from typing import (
+    FrozenSet,
     Iterable,
     List,
     Mapping,
@@ -19,6 +24,7 @@ from typing import (
     Set,
     Tuple,
     Type,
+    TypeVar,
     Union,
 )
 
@@ -43,6 +49,24 @@ def string_to_indentations(string: str) -> List[int]:
         indentation = len(line) - len(line.lstrip(" \t"))
         indentations.extend([indentation] * len(line))
     return indentations
+
+
+def offset_to_line_and_column(string: str, offset: int) -> Tuple[int, int]:
+    """
+    Return the (1-indexed) line and column number corresponding with the
+    specified offset.
+    """
+    lineno = 0
+    line = ""
+    remaining = offset
+    for lineno, line in enumerate(string.splitlines(keepends=True)):
+        if remaining < len(line):
+            return lineno + 1, remaining + 1
+        else:
+            remaining -= len(line)
+
+    # When beyond the end of the file, just point off the end of the last line
+    return lineno + 1, len(line) + 1
 
 
 class RelativeIndentation(Enum):
@@ -73,6 +97,46 @@ class RelativeIndentation(Enum):
             raise NotImplementedError(self)
 
 
+@dataclass
+class GrammarWellFormedness:
+    """Base class of result from a well-formedness test."""
+
+    def __bool__(self) -> bool:
+        return False
+
+
+@dataclass
+class WellFormed(GrammarWellFormedness):
+    """The grammar is well formed."""
+
+    def __bool__(self) -> bool:
+        return True
+
+
+@dataclass
+class UndefinedRule(GrammarWellFormedness):
+    """The grammar refers to an undefined rule."""
+
+    name: str
+
+
+@dataclass
+class LeftRecursion(GrammarWellFormedness):
+    """The grammar contains a left-recursive rule."""
+
+    name: str
+
+
+@dataclass
+class RepeatedEmptyTerm(GrammarWellFormedness):
+    """The grammar contains a repeated empty term."""
+
+    expr: "Expr"
+
+
+ExprT = TypeVar("ExprT", bound="Expr")
+
+
 class Expr:
     """An expression in a PEG grammar. Abstract base class."""
 
@@ -87,10 +151,72 @@ class Expr:
     expression matched.
     """
 
-    def with_indentation(self, new_indentation: RelativeIndentation) -> "Expr":
+    def with_indentation(self: ExprT, new_indentation: RelativeIndentation) -> ExprT:
         """Create a copy of this Expr with the specified relative indentation."""
         # NB: Relies on subclasses of this type being dataclasses
         return replace(self, indentation=new_indentation)
+
+    def iter_subexpressions(self, grammar: "Grammar") -> Iterable["Expr"]:
+        """Iterate over the sub-expressions within this expression."""
+        raise NotImplementedError()
+
+    def iter_first_subexpressions(self, grammar: "Grammar") -> Iterable["Expr"]:
+        """
+        Iterate over subexpressions which may be matched first by this
+        expression.
+        """
+        return self.iter_subexpressions(grammar)
+
+    def iter_first_rules_and_regexes(
+        self, grammar: "Grammar"
+    ) -> Iterable[Union["RuleExpr", "RegexExpr"]]:
+        r"""
+        Iterate over the :py:class:`RuleExpr` or :py:class:`RegexExpr`\ s which
+        are matched by this Expr. Does not recurse into rules.
+        """
+        for child in self.iter_first_subexpressions(grammar):
+            yield from child.iter_first_rules_and_regexes(grammar)
+
+    def matches_empty(
+        self, grammar: "Grammar", _visited_rules: Optional[Set[str]] = None
+    ) -> bool:
+        """
+        Test if this expression can match the empty string (in the context of
+        the specified grammar).
+        """
+        raise NotImplementedError()
+
+    def first_set(
+        self, grammar: "Grammar", _visited_rules: Optional[Set[str]] = None
+    ) -> Set["Expr"]:
+        r"""
+        Return the set of :py:class:`Expr`\ s which are immediateliy matched by
+        this :py:class:`Expr`. Results are recursive.
+        """
+        if _visited_rules is None:
+            _visited_rules = set()
+
+        first = set()
+        for subexpression in self.iter_first_subexpressions(grammar):
+            first.add(subexpression)
+            first.update(subexpression.first_set(grammar, _visited_rules))
+        return first
+
+    def is_well_formed(
+        self, grammar: "Grammar", _visited_rules: Optional[Set[str]] = None
+    ) -> GrammarWellFormedness:
+        """
+        Is this expression well-formed? That is, does it lack any repeated
+        empty expressions, left recursion or undefined rules.
+        """
+        if _visited_rules is None:
+            _visited_rules = set()
+
+        for expr in self.iter_subexpressions(grammar):
+            well_formed = expr.is_well_formed(grammar, _visited_rules)
+            if not well_formed:
+                return well_formed
+        return WellFormed()
 
 
 @dataclass(frozen=True)
@@ -100,6 +226,16 @@ class AltExpr(Expr):
     exprs: Tuple[Expr, ...]
     indentation: RelativeIndentation = RelativeIndentation.any
 
+    def iter_subexpressions(self, grammar: "Grammar") -> Iterable["Expr"]:
+        return iter(self.exprs)
+
+    def matches_empty(
+        self, grammar: "Grammar", _visited_rules: Optional[Set[str]] = None
+    ) -> bool:
+        if _visited_rules is None:
+            _visited_rules = set()
+        return any(e.matches_empty(grammar, _visited_rules) for e in self.exprs)
+
 
 @dataclass(frozen=True)
 class ConcatExpr(Expr):
@@ -107,6 +243,22 @@ class ConcatExpr(Expr):
 
     exprs: Tuple[Expr, ...]
     indentation: RelativeIndentation = RelativeIndentation.any
+
+    def iter_subexpressions(self, grammar: "Grammar") -> Iterable["Expr"]:
+        return iter(self.exprs)
+
+    def iter_first_subexpressions(self, grammar: "Grammar") -> Iterable["Expr"]:
+        for expr in self.exprs:
+            yield expr
+            if not expr.matches_empty(grammar):
+                break
+
+    def matches_empty(
+        self, grammar: "Grammar", _visited_rules: Optional[Set[str]] = None
+    ) -> bool:
+        if _visited_rules is None:
+            _visited_rules = set()
+        return all(e.matches_empty(grammar, _visited_rules) for e in self.exprs)
 
 
 @dataclass(frozen=True)
@@ -116,6 +268,21 @@ class StarExpr(Expr):
     expr: Expr
     indentation: RelativeIndentation = RelativeIndentation.any
 
+    def iter_subexpressions(self, grammar: "Grammar") -> Iterable["Expr"]:
+        return iter((self.expr,))
+
+    def matches_empty(
+        self, grammar: "Grammar", _visited_rules: Optional[Set[str]] = None
+    ) -> bool:
+        return True
+
+    def is_well_formed(
+        self, grammar: "Grammar", _visited_rules: Optional[Set[str]] = None
+    ) -> GrammarWellFormedness:
+        if self.expr.matches_empty(grammar):
+            return RepeatedEmptyTerm(self)
+        return super().is_well_formed(grammar, _visited_rules)
+
 
 @dataclass(frozen=True)
 class LookaheadExpr(Expr):
@@ -123,6 +290,14 @@ class LookaheadExpr(Expr):
 
     expr: Expr
     indentation: RelativeIndentation = RelativeIndentation.any
+
+    def iter_subexpressions(self, grammar: "Grammar") -> Iterable["Expr"]:
+        return iter((self.expr,))
+
+    def matches_empty(
+        self, grammar: "Grammar", _visited_rules: Optional[Set[str]] = None
+    ) -> bool:
+        return True
 
 
 @dataclass(frozen=True)
@@ -132,6 +307,65 @@ class RuleExpr(Expr):
     name: str
     indentation: RelativeIndentation = RelativeIndentation.any
 
+    def iter_subexpressions(self, grammar: "Grammar") -> Iterable["Expr"]:
+        # Special case; to avoid crash when undefined rule is used
+        if self.name in grammar.rules:
+            return iter((grammar.rules[self.name],))
+        else:
+            return iter(())
+
+    def iter_first_rules_and_regexes(
+        self, grammar: "Grammar"
+    ) -> Iterable[Union["RuleExpr", "RegexExpr"]]:
+        yield self
+
+    def matches_empty(
+        self, grammar: "Grammar", _visited_rules: Optional[Set[str]] = None
+    ) -> bool:
+        if _visited_rules is None:
+            _visited_rules = set()
+
+        if self.name in _visited_rules:
+            return True  # Left-recursive rule encountered; halt recursion
+        else:
+            _visited_rules.add(self.name)
+            result = grammar.rules[self.name].matches_empty(grammar, _visited_rules)
+            _visited_rules.remove(self.name)
+            return result
+
+    def first_set(
+        self, grammar: "Grammar", _visited_rules: Optional[Set[str]] = None
+    ) -> Set[Expr]:
+        r"""
+        Return the set of :py:class:`Expr`\ s which are immediateliy matched by
+        this :py:class:`Expr`. Results are recursive.
+        """
+        if _visited_rules is None:
+            _visited_rules = set()
+
+        if self.name in _visited_rules:
+            return set()
+        else:
+            _visited_rules.add(self.name)
+
+        return super().first_set(grammar, _visited_rules)
+
+    def is_well_formed(
+        self, grammar: "Grammar", _visited_rules: Optional[Set[str]] = None
+    ) -> GrammarWellFormedness:
+        if self.name not in grammar.rules:
+            return UndefinedRule(self.name)
+        if self in self.first_set(grammar):
+            return LeftRecursion(self.name)
+
+        if _visited_rules is None:
+            _visited_rules = set()
+        if self.name in _visited_rules:
+            return WellFormed()
+        _visited_rules.add(self.name)
+
+        return super().is_well_formed(grammar, _visited_rules)
+
 
 @dataclass(frozen=True)
 class RegexExpr(Expr):
@@ -140,12 +374,33 @@ class RegexExpr(Expr):
     pattern: Pattern[str]
     indentation: RelativeIndentation = RelativeIndentation.any
 
+    def iter_subexpressions(self, grammar: "Grammar") -> Iterable["Expr"]:
+        return iter(())
+
+    def iter_first_rules_and_regexes(
+        self, grammar: "Grammar"
+    ) -> Iterable[Union["RuleExpr", "RegexExpr"]]:
+        yield self
+
+    def matches_empty(
+        self, grammar: "Grammar", _visited_rules: Optional[Set[str]] = None
+    ) -> bool:
+        return self.pattern.match("") is not None
+
 
 @dataclass(frozen=True)
 class EmptyExpr(Expr):
     """Match the empty string."""
 
     indentation: RelativeIndentation = RelativeIndentation.any
+
+    def iter_subexpressions(self, grammar: "Grammar") -> Iterable["Expr"]:
+        return iter(())
+
+    def matches_empty(
+        self, grammar: "Grammar", _visited_rules: Optional[Set[str]] = None
+    ) -> bool:
+        return True
 
 
 @dataclass(frozen=True)
@@ -155,6 +410,14 @@ class MaybeExpr(Expr):
     expr: Expr
     indentation: RelativeIndentation = RelativeIndentation.any
 
+    def iter_subexpressions(self, grammar: "Grammar") -> Iterable["Expr"]:
+        return iter((self.expr,))
+
+    def matches_empty(
+        self, grammar: "Grammar", _visited_rules: Optional[Set[str]] = None
+    ) -> bool:
+        return True
+
 
 @dataclass(frozen=True)
 class PlusExpr(Expr):
@@ -163,6 +426,21 @@ class PlusExpr(Expr):
     expr: Expr
     indentation: RelativeIndentation = RelativeIndentation.any
 
+    def iter_subexpressions(self, grammar: "Grammar") -> Iterable["Expr"]:
+        return iter((self.expr,))
+
+    def matches_empty(
+        self, grammar: "Grammar", _visited_rules: Optional[Set[str]] = None
+    ) -> bool:
+        return self.expr.matches_empty(grammar, _visited_rules)
+
+    def is_well_formed(
+        self, grammar: "Grammar", _visited_rules: Optional[Set[str]] = None
+    ) -> GrammarWellFormedness:
+        if self.expr.matches_empty(grammar):
+            return RepeatedEmptyTerm(self)
+        return super().is_well_formed(grammar, _visited_rules)
+
 
 @dataclass(frozen=True)
 class PositiveLookaheadExpr(Expr):
@@ -170,6 +448,14 @@ class PositiveLookaheadExpr(Expr):
 
     expr: Expr
     indentation: RelativeIndentation = RelativeIndentation.any
+
+    def iter_subexpressions(self, grammar: "Grammar") -> Iterable["Expr"]:
+        return iter((self.expr,))
+
+    def matches_empty(
+        self, grammar: "Grammar", _visited_rules: Optional[Set[str]] = None
+    ) -> bool:
+        return True
 
 
 @dataclass
@@ -182,10 +468,28 @@ class Grammar:
     start_rule: str = "start"
     """Name of the starting rule in :py:attr:`rules`."""
 
+    def is_well_formed(self) -> GrammarWellFormedness:
+        """
+        Is this grammar well-formed? That is, is it free from missing rules,
+        (direct/indirect/hidden) left recursive rules and iteration of empty
+        patterns?
+        """
+        if self.start_rule not in self.rules:
+            return UndefinedRule(self.start_rule)
+        visited_rules: Set[str] = set()
+        for name in self.rules:
+            well_formed = RuleExpr(name).is_well_formed(self, visited_rules)
+            if not well_formed:
+                return well_formed
+        return WellFormed()
+
 
 @dataclass(frozen=True)
 class ParseTree:
     """A parse tree generated by the parser. Base class."""
+
+    def __bool__(self) -> bool:
+        return True
 
     def iter_children(self) -> Iterable["ParseTree"]:
         """Iterate over child parse trees."""
@@ -327,18 +631,53 @@ class PositiveLookahead(ParseTree):
         return iter(())
 
 
+@dataclass(frozen=True)
+class ParseFailure:
+    """Base type for parse failiure outcomes."""
+
+    expression: Expr
+    """The :py:class:`Expr` which failed to match."""
+
+    offset: int
+    """Offset at which the failure occurred."""
+
+    def __bool__(self) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class UnmatchedExpression(ParseFailure):
+    """Produced when an expression is not matched."""
+
+    pass
+
+
+@dataclass(frozen=True)
+class UnmatchedIndentation(ParseFailure):
+    """Produced when an :py:class:`RelativeIndentation` requirement is not met."""
+
+    start_indentation: int
+    """The indentation level the rule is relative to."""
+
+    indentation: RelativeIndentation
+    """The required (unmet) indentation rule."""
+
+
+ParseResult = Union[ParseTree, ParseFailure]
+
+
 class GrammarError(Exception):
     """Thrown when a problem is encountered with the grammar during parsing."""
 
 
-class RepeatedEmptyTermInGrammarError(GrammarError):
+class RepeatedEmptyTermError(GrammarError):
     """
     Thrown when a grammar contains a rule which repeats a term which matches
     the empty string.
     """
 
 
-class LeftRecursiveGrammarError(GrammarError):
+class LeftRecursionError(GrammarError):
     """
     Thrown when a grammar contains a direct/indirect/hidden left-recursive
     rule.
@@ -351,19 +690,163 @@ class UndefinedRuleError(GrammarError):
     """
 
 
-class ParseError(Exception):
-    """Thrown when parsing fails."""
+class AbsoluteIndentation(NamedTuple):
+    """An absolute indentation requirement."""
 
-    def __init__(self, line: int, column: int, expected_patterns: List[str]) -> None:
-        super().__init__()
-        self.line = line
-        self.column = column
-        self.expected_patterns = expected_patterns
+    start_indentation: int
+    """The indentation level the rule is relative to."""
+
+    indentation: RelativeIndentation
+    """The required (unmet) indentation rule."""
+
+
+@dataclass(frozen=True)
+class ParseError(Exception):
+    """
+    Thrown when parsing fails.
+
+    Attributes
+    ----------
+    line : int
+        One-indexed line number where the error occurred.
+    column : int
+        One-indexed column number where the error occurred.
+    snippet : str
+        The contents of the offending line.
+    expectations : {(rule_or_regex, {AbsoluteIndentation or None, ...}), ...}
+        The set of :py:class:`RuleExpr` and :py:class:`RegexExpr` expressions
+        which the parser would have accepted at this point, along any required
+        differences in indentation.
+    """
+
+    line: int
+    column: int
+    snippet: str
+    expectations: Set[
+        Tuple[Union[RuleExpr, RegexExpr], FrozenSet[Optional[AbsoluteIndentation]]]
+    ]
+
+    def explain_expected(
+        self,
+        expr_explanations: Mapping[Union[RuleExpr, RegexExpr], Optional[str]] = {},
+        last_resort_exprs: Set[Union[RuleExpr, RegexExpr]] = set(),
+        just_indentation: bool = False,
+    ) -> str:
+        """
+        Return a human-readable string describing the expected next values.
+
+        Parameters
+        ----------
+        expr_explanations : {rule_or_regex: str or None, ...}
+            By default expected rules are shown as their rule name and regexes
+            as their pattern (in quotes). This representation may be overridden
+            here (by providing a string) or a given expression suppressed from
+            the explanation (by providing None).
+        last_resort_exprs : {rule_or_regex, ...}
+            A set of rule or regex expressions which are ordinarily suppressed
+            from explanations except when these are the only matching
+            expressions in which case they are included.
+        just_indentation : bool
+            If True, when at least one expression with an indentation
+            requirement is present, non-indentation related expectations are
+            suppressed.
+        """
+        # Strip indentation specs from expressions to ensure just rule names or
+        # patterns are matched
+        expr_explanations = {
+            expr.with_indentation(RelativeIndentation.any): exp
+            for expr, exp in expr_explanations.items()
+        }
+        last_resort_exprs = {
+            expr.with_indentation(RelativeIndentation.any) for expr in last_resort_exprs
+        }
+
+        out = []
+        last_resort = []
+        indentation_specified = []
+        for rule_or_regex, unmatched_indentations in self.expectations:
+            explanation: Optional[str]
+            rule_or_regex_no_indent = rule_or_regex.with_indentation(
+                RelativeIndentation.any
+            )
+            if rule_or_regex_no_indent in expr_explanations:
+                explanation = expr_explanations[rule_or_regex_no_indent]
+            elif isinstance(rule_or_regex, RuleExpr):
+                explanation = rule_or_regex.name
+            elif isinstance(rule_or_regex, RegexExpr):
+                explanation = repr(rule_or_regex.pattern.pattern)
+            else:
+                raise TypeError(type(rule_or_regex))  # Unreachable...
+
+            if explanation is None:
+                continue
+
+            required_indentations = {
+                "{} {}".format(
+                    unmatched_indentation.indentation.value[1:],
+                    unmatched_indentation.start_indentation,
+                )
+                for unmatched_indentation in unmatched_indentations
+                if unmatched_indentation is not None
+            }
+            if required_indentations:
+                explanation += " ({}with indentation {})".format(
+                    ("optionally " if None in unmatched_indentations else ""),
+                    " or ".join(sorted(required_indentations)),
+                )
+
+            if explanation not in out:
+                out.append(explanation)
+                last_resort.append(
+                    rule_or_regex.with_indentation(RelativeIndentation.any)
+                    in last_resort_exprs
+                )
+                indentation_specified.append(bool(required_indentations))
+
+        if not all(last_resort):
+            to_remove = [i for i, lr in enumerate(last_resort) if lr]
+            for i in reversed(to_remove):
+                del out[i]
+                del last_resort[i]
+                del indentation_specified[i]
+
+        if just_indentation and any(indentation_specified):
+            to_remove = [i for i, ind in enumerate(indentation_specified) if not ind]
+            for i in reversed(to_remove):
+                del out[i]
+                del last_resort[i]
+                del indentation_specified[i]
+
+        if out:
+            return "Expected {}".format(" or ".join(sorted(out)))
+        else:
+            return "Parsing failure"
+
+    def explain(
+        self,
+        expr_explanations: Mapping[Union[RuleExpr, RegexExpr], Optional[str]] = {},
+        last_resort_exprs: Set[Union[RuleExpr, RegexExpr]] = set(),
+        just_indentation: bool = False,
+    ) -> str:
+        """
+        Produce a human readable description of the parse error.
+
+        See :py:meth:`explain_expected` for argument meanings.
+        """
+        return "At line {} column {}:\n{}\n{}".format(
+            self.line,
+            self.column,
+            indent(
+                "{}\n{}^".format(self.snippet.rstrip(), " " * (self.column - 1)),
+                "    ",
+            ),
+            self.explain_expected(
+                expr_explanations, last_resort_exprs, just_indentation
+            ),
+        )
 
     def __str__(self) -> str:
-        return "Parse error on line {}, column {}: expected {}".format(
-            self.line, self.column, " or ".join(self.expected_patterns)
-        )
+        return self.explain()
 
 
 class Parser:
@@ -381,11 +864,18 @@ class Parser:
     class _Result(NamedTuple):
         """Identifies the result of matching an expression."""
 
-        parse_tree: Optional[ParseTree]
+        parse_tree: ParseResult
         new_offset: int
 
     _cache: MutableMapping[_Step, _Result]
     """Packrat parsing cache."""
+
+    _parse_failures: List[ParseFailure]
+    """
+    A list of parsing failures, in the order they are encountered. Failures
+    relating to lookaheads are removed. This value is used during error message
+    generation to find the furthest point parsing managed to reach.
+    """
 
     _executing_rules: Set[Tuple[str, int]]
     """
@@ -408,102 +898,138 @@ class Parser:
     def __init__(self, grammar: Grammar) -> None:
         self._grammar = grammar
 
-    def _parse_empty(self, expr: EmptyExpr) -> Optional[Empty]:
+    def _parse_empty(self, expr: EmptyExpr) -> Empty:
         return Empty()
 
-    def _parse_regex(self, expr: RegexExpr) -> Optional[Regex]:
-        start = self._offset
-        match = expr.pattern.match(self._string[start:])
+    def _parse_regex(self, expr: RegexExpr) -> Union[Regex, ParseFailure]:
+        start_offset = self._offset
+        match = expr.pattern.match(self._string[start_offset:])
         if match is None:
-            return None
+            return UnmatchedExpression(expr, start_offset)
         else:
             string = match.group(0)
             self._offset += len(string)
-            return Regex(string, start)
+            return Regex(string, start_offset)
 
-    def _parse_alt(self, expr: AltExpr) -> Optional[Alt]:
+    def _parse_alt(self, expr: AltExpr) -> Union[Alt, ParseFailure]:
         start_offset = self._offset
 
         for candidate_index, candidate_expr in enumerate(expr.exprs):
             parse_tree = self._parse(candidate_expr)
-            if parse_tree is not None:
+            if parse_tree:
+                assert isinstance(parse_tree, ParseTree)
                 return Alt(parse_tree, candidate_index)
             else:
                 self._offset = start_offset
 
-        return None
+        return UnmatchedExpression(expr, start_offset)
 
     def _check_indent(
-        self, start_offset: int, indentation: RelativeIndentation
-    ) -> bool:
+        self, expr: Expr, block_start_offset: int, expr_start_offset: int
+    ) -> Optional[UnmatchedIndentation]:
         """
         Check if the current offset is correctly indented with respect to the
-        indentation level used at ``start_offset`` and the indentation rule
-        given in ``indentation``.
+        indentation level used at ``block_start_offset`` and the indentation
+        rule for the provided expression. Returns an
+        :py:class:`UnmatchedExpression` if the rule is not satisfied and None
+        if it is.
         """
-        if start_offset >= len(self._string) or self._offset >= len(self._string):
+        if block_start_offset >= len(self._string) or expr_start_offset >= len(
+            self._string
+        ):
             # At end of string, skip the check
-            return True
+            return None
 
-        start_indent = self._indentations[start_offset]
-        current_indent = self._indentations[self._offset]
+        start_indent = self._indentations[block_start_offset]
+        current_indent = self._indentations[expr_start_offset]
 
-        return indentation.check(start_indent, current_indent)
+        if expr.indentation.check(start_indent, current_indent):
+            return None
+        else:
+            return UnmatchedIndentation(
+                expr, expr_start_offset, start_indent, expr.indentation
+            )
 
-    def _parse_concat(self, expr: ConcatExpr) -> Optional[Concat]:
+    def _parse_concat(self, expr: ConcatExpr) -> Union[Concat, ParseFailure]:
         start_offset = self._offset
         parse_trees = []
         for sub_expr in expr.exprs:
-            # Check subexpression is correctly indented
-            if not self._check_indent(start_offset, sub_expr.indentation):
-                self._offset = start_offset
-                return None
-
             # Check subexpression is matched
+            old_num_parse_failures = len(self._parse_failures)
+            before_offset = self._offset
             parse_tree = self._parse(sub_expr)
-            if parse_tree is None:
+            empty_string_matched = self._offset == before_offset
+
+            # Check subexpression is correctly indented (unless the empty
+            # string was matched in which case we allow arbitrary indentation,
+            # as a special case; e.g. for 'optional' subexpressions).
+            if not empty_string_matched:
+                indentation_problem = self._check_indent(
+                    sub_expr, start_offset, before_offset
+                )
+                if indentation_problem is not None:
+                    # NB: In the event of an mis-indented expression, we wish
+                    # for the indentation failure to be the most recent
+                    # failure. As such we must discard any other failures
+                    # encountered while matching the expression above.
+                    del self._parse_failures[old_num_parse_failures:]
+                    self._offset = start_offset
+                    return indentation_problem
+
+            # Fail if subexpression wasn't matched
+            if not isinstance(parse_tree, ParseTree):
                 self._offset = start_offset
-                return None
-            else:
-                parse_trees.append(parse_tree)
+                return UnmatchedExpression(expr, self._offset)
+
+            parse_trees.append(parse_tree)
 
         return Concat(tuple(parse_trees))
 
-    def _parse_star(self, expr: StarExpr) -> Optional[Star]:
+    def _parse_star(self, expr: StarExpr) -> Star:
         start_offset = self._offset
         last_offset = self._offset
         parse_trees = []
         while True:
-            # Check subexpression is correctly indented
-            if not self._check_indent(start_offset, expr.expr.indentation):
+            # Check if next expression has appropriate indentation (and
+            # therefore could be a match)
+            indentation_problem = self._check_indent(
+                expr.expr, start_offset, last_offset
+            )
+            if indentation_problem is not None:
+                self._parse_failures.append(indentation_problem)
                 break
 
             # Check subexpression is matched
             parse_tree = self._parse(expr.expr)
-            if parse_tree is None:
+            if not isinstance(parse_tree, ParseTree):
                 break
-            else:
-                parse_trees.append(parse_tree)
 
-            # Well-formedness sanity check: matched expression must not match
-            # the empty string
+            # Well-formedness sanity check: must not have matched the empty
+            # string
             if self._offset <= last_offset:
-                raise RepeatedEmptyTermInGrammarError(expr)
+                raise RepeatedEmptyTermError(expr)
             last_offset = self._offset
+
+            parse_trees.append(parse_tree)
 
         return Star(tuple(parse_trees))
 
-    def _parse_lookahead(self, expr: LookaheadExpr) -> Optional[Lookahead]:
-        start_offset = self._offset
-        parse_tree = self._parse(expr.expr)
-        self._offset = start_offset
+    def _parse_lookahead(self, expr: LookaheadExpr) -> Union[Lookahead, ParseFailure]:
+        old_num_parse_failures = len(self._parse_failures)
+        try:
+            start_offset = self._offset
+            parse_tree = self._parse(expr.expr)
+            self._offset = start_offset
 
-        if parse_tree is not None:
-            return None
-        else:
-            return Lookahead()
+            if parse_tree:
+                return UnmatchedExpression(expr, self._offset)
+            else:
+                return Lookahead()
+        finally:
+            # Erase all failures noted during the lookahead
+            del self._parse_failures[old_num_parse_failures:]
 
-    def _parse_rule(self, expr: RuleExpr) -> Optional[Rule]:
+    def _parse_rule(self, expr: RuleExpr) -> Union[Rule, ParseFailure]:
         # Sanity check: all rules referenced
         if expr.name not in self._grammar.rules:
             raise UndefinedRuleError(expr.name)
@@ -512,54 +1038,53 @@ class Parser:
         # direct/indirect/hidden left recursion.
         rule_instantiation = (expr.name, self._offset)
         if rule_instantiation in self._executing_rules:
-            raise LeftRecursiveGrammarError(expr)
+            raise LeftRecursionError(expr)
         self._executing_rules.add(rule_instantiation)
 
         try:
             parse_tree = self._parse(self._grammar.rules[expr.name])
-            if parse_tree is not None:
+            if parse_tree:
+                assert isinstance(parse_tree, ParseTree)
                 return Rule(expr.name, parse_tree)
             else:
-                return None
+                return UnmatchedExpression(expr, self._offset)
         finally:
             self._executing_rules.remove(rule_instantiation)
 
-    def _parse_maybe(self, expr: MaybeExpr) -> Optional[Maybe]:
+    def _parse_maybe(self, expr: MaybeExpr) -> Maybe:
         # NB: Syntactic sugar, implemented via other operators
         alt_expr = AltExpr((expr.expr, EmptyExpr()))
         # NB: Called directly to avoid caching things which aren't part of the
         # grammar.
         parse_tree = self._parse_alt(alt_expr)
-        assert parse_tree is not None
+        assert isinstance(parse_tree, Alt)
         if parse_tree.choice_index == 0:
             return Maybe(parse_tree.value)
         else:
             return Maybe(None)
 
-    def _parse_plus(self, expr: PlusExpr) -> Optional[Plus]:
+    def _parse_plus(self, expr: PlusExpr) -> Union[Plus, ParseFailure]:
         # NB: Syntactic sugar, implemented via other operators
         parse_tree = self._parse_star(StarExpr(expr.expr))
-        if parse_tree is None:
-            return None
-        elif len(parse_tree.values) == 0:
-            return None
+        if len(parse_tree.values) == 0:
+            return UnmatchedExpression(expr, self._offset)
         else:
             return Plus(parse_tree.values)
 
     def _parse_positive_lookahead(
         self, expr: PositiveLookaheadExpr
-    ) -> Optional[PositiveLookahead]:
+    ) -> Union[PositiveLookahead, ParseFailure]:
         # NB: Syntactic sugar, implemented via other operators
         lookahead_expr = LookaheadExpr(expr.expr)
         # NB: Called directly to avoid caching things which aren't part of the
         # grammar.
         parse_tree = self._parse_lookahead(lookahead_expr)
-        if parse_tree is None:
+        if not parse_tree:
             return PositiveLookahead()
         else:
-            return None
+            return UnmatchedExpression(expr, self._offset)
 
-    def _parse_no_cache(self, expr: Expr) -> Optional[ParseTree]:
+    def _parse_no_cache(self, expr: Expr) -> ParseResult:
         if isinstance(expr, EmptyExpr):
             return self._parse_empty(expr)
         elif isinstance(expr, RegexExpr):
@@ -584,47 +1109,69 @@ class Parser:
             # Should be unreachable...
             raise TypeError(type(expr))
 
-    def _parse(self, expr: Expr) -> Optional[ParseTree]:
+    def _parse(self, expr: Expr) -> ParseResult:
         step = Parser._Step(expr, self._offset)
         if step not in self._cache:
-            self._cache[step] = Parser._Result(self._parse_no_cache(expr), self._offset)
+            parse_result = self._parse_no_cache(expr)
+            self._cache[step] = Parser._Result(parse_result, self._offset)
 
-        parse_tree, offset = self._cache[step]
+        parse_result, offset = self._cache[step]
         self._offset = offset
-        return parse_tree
+        if isinstance(parse_result, ParseFailure):
+            self._parse_failures.append(parse_result)
+        return parse_result
 
-    def _get_last_non_matching(self) -> Tuple[int, int, List[str]]:
+    def _get_parse_error(self) -> ParseError:
         """
-        Enumerate the line, column and last expressions which failed to match.
+        Produce a :py:exc:`ParseError` describing the current parsing faliure.
         """
-        last_offset = max(
-            step.offset
-            for step, result in self._cache.items()
-            if result.parse_tree is None
-        )
+        # Assume the error occurred at the position of the longest parse
+        offset = max(failure.offset for failure in self._parse_failures)
+        line, column = offset_to_line_and_column(self._string, offset)
 
-        lines = self._string[: last_offset + 1].splitlines(keepends=True)
-        last_line = len(lines)
-        last_column = len(([""] + lines)[-1])
+        # Find all of the candidate expressions which failed at this point
+        expected_exprs: Set[Expr] = set()
+        expected_expr_indentations: MutableMapping[
+            Expr, Set[Optional[AbsoluteIndentation]]
+        ] = defaultdict(set)
+        for failure in self._parse_failures:
+            if failure.offset != offset:
+                continue
 
-        last_non_matching = [
-            (
-                step.expression.pattern.pattern
-                if isinstance(step.expression, RegexExpr)
-                else step.expression.name
-                if isinstance(step.expression, RuleExpr)
-                else ""  # Unreachable
-            )
-            for step, result in self._cache.items()
-            if (
-                step.offset == last_offset
-                and result.parse_tree is None
-                and isinstance(step.expression, (RegexExpr, RuleExpr))
-            )
-        ]
-        return last_line, last_column, last_non_matching
+            expected_indentation: Optional[AbsoluteIndentation] = None
+            if isinstance(failure, UnmatchedIndentation):
+                expected_indentation = AbsoluteIndentation(
+                    failure.start_indentation, failure.indentation,
+                )
 
-    def parse(self, string: str) -> ParseTree:
+            for expr in set([failure.expression]) | failure.expression.first_set(
+                self._grammar
+            ):
+                expected_exprs.add(expr)
+                expected_expr_indentations[expr].add(expected_indentation)
+
+        # Keep only the top-most expressions
+        for expr in expected_exprs.copy():
+            for subexpr in expr.iter_first_subexpressions(self._grammar):
+                expected_exprs.discard(subexpr)
+
+        # Simplify into the rules/regexes which failed to match
+        expectations = {
+            (rule_or_regex, frozenset(expected_expr_indentations[rule_or_regex]))
+            for expr in expected_exprs
+            for rule_or_regex in expr.iter_first_rules_and_regexes(self._grammar)
+        }
+
+        if self._string:
+            snippet = self._string.splitlines()[line - 1]
+        else:
+            # Special case: str.splitlines returns an empty list for the empty
+            # string
+            snippet = ""
+
+        return ParseError(line, column, snippet, expectations)
+
+    def parse(self, string: str) -> Rule:
         """
         Parse a string, returning the parse tree, if successful, and raises
         :py:exc:`ParseError` otherwise.
@@ -633,10 +1180,12 @@ class Parser:
         self._indentations = string_to_indentations(self._string)
         self._offset = 0
         self._cache = {}
+        self._parse_failures = []
         self._executing_rules = set()
         parse_tree = self._parse(RuleExpr(self._grammar.start_rule))
 
-        if parse_tree is not None:
+        if parse_tree:
+            assert isinstance(parse_tree, Rule)
             return parse_tree
         else:
-            raise ParseError(*self._get_last_non_matching())
+            raise self._get_parse_error()
