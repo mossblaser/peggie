@@ -3,8 +3,6 @@ import pytest  # type: ignore
 import re
 
 from peggie.parser.parser import (
-    Parser,
-    Grammar,
     Expr,
     RegexExpr,
     RuleExpr,
@@ -16,7 +14,6 @@ from peggie.parser.parser import (
     PlusExpr,
     AltExpr,
     ConcatExpr,
-    Rule,
     LeftRecursion,
 )
 
@@ -33,18 +30,12 @@ from peggie.parser.grammar_compiler import (
 
 
 class TestCompileGrammar:
-    def parse_and_compile_grammar(self, string: str) -> Grammar:
-        p = Parser(grammar)
-        parse_tree = p.parse(string)
-        assert isinstance(parse_tree, Rule)
-        return compile_grammar(parse_tree)
-
     def test_repeated_names_rejected(self) -> None:
         with pytest.raises(RuleDefinedMultipleTimesError):
-            self.parse_and_compile_grammar("name <- .\nname <- .")
+            compile_grammar("name <- .\nname <- .")
 
     def test_start_rule_is_first_rule(self) -> None:
-        g = self.parse_and_compile_grammar("a <- 'ay'\nb <- 'bee'\nc <- 'see'")
+        g = compile_grammar("a <- 'ay'\nb <- 'bee'\nc <- 'see'")
         assert g.start_rule == "a"
         assert set(g.rules) == set(["a", "b", "c"])
 
@@ -120,26 +111,23 @@ class TestCompileGrammar:
         ],
     )
     def test_expression(self, rule: str, exp_expr: Expr) -> None:
-        g = self.parse_and_compile_grammar(
+        g = compile_grammar(
             "start <- {}\nrule<-.\na<-.\nb<-.\nc<-.\nd<-.\nr<-.".format(rule)
         )
         assert g.rules["start"] == exp_expr
 
     def test_well_formedness_enforced(self) -> None:
         with pytest.raises(GrammarNotWellFormedError) as exc_info:
-            self.parse_and_compile_grammar("start <- start")
+            compile_grammar("start <- start")
         exc_info.value.args == (LeftRecursion("start"),)
 
 
 def test_self_hosting() -> None:
     # Check that the PEG grammar can parse its own description and that it
     # results in the same compiled grammar representation.
-    p = Parser(grammar)
-    parse_tree = p.parse(grammar_source)
-    assert isinstance(parse_tree, Rule)
 
     # import pprint
     # open("/tmp/a", "w").write(pprint.pformat(grammar.rules))
-    # open("/tmp/b", "w").write(pprint.pformat(compile_grammar(parse_tree).rules))
+    # open("/tmp/b", "w").write(pprint.pformat(compile_grammar(grammar_source).rules))
 
-    assert compile_grammar(parse_tree) == grammar
+    assert compile_grammar(grammar_source) == grammar
