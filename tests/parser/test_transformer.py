@@ -88,18 +88,26 @@ def test_custom_transform_regex() -> None:
 
 
 def test_custom_rule_transformers() -> None:
-    class MyTransformer(ParseTreeTransformer):
+    class MyTransformer1(ParseTreeTransformer):
         def foo(self, parse_tree: ParseTree, transformed_children: Any) -> Any:
             assert parse_tree == Concat((Regex("foo", 0), Regex("bar", 3)))
             assert transformed_children == ["foo", "bar"]
             return transformed_children + ["baz"]
 
-    t = MyTransformer()
-    assert t.transform(Rule("foo", Concat((Regex("foo", 0), Regex("bar", 3))))) == [
-        "foo",
-        "bar",
-        "baz",
-    ]
+    class MyTransformer2(ParseTreeTransformer):
+        def foo_(self, parse_tree: ParseTree, transformed_children: Any) -> Any:
+            # NB this method has a "_" suffix
+            assert parse_tree == Concat((Regex("foo", 0), Regex("bar", 3)))
+            assert transformed_children == ["foo", "bar"]
+            return transformed_children + ["baz"]
+
+    for MyTransformer in [MyTransformer1, MyTransformer2]:
+        t = MyTransformer()
+        assert t.transform(Rule("foo", Concat((Regex("foo", 0), Regex("bar", 3))))) == [
+            "foo",
+            "bar",
+            "baz",
+        ]
 
 
 def test_custom_rule_enter() -> None:
