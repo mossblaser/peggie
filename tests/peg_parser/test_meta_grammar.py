@@ -1,11 +1,11 @@
 import pytest  # type: ignore
 
-from peggie.parser.parser import (
+from peggie.peg_parser.parser import (
     Parser,
     ParseError,
 )
 
-from peggie.parser.meta_grammar import (
+from peggie.peg_parser.meta_grammar import (
     grammar,
     grammar_source,
 )

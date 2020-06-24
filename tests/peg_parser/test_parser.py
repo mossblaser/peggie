@@ -4,7 +4,7 @@ from typing import List, Union, Optional, Set, Type, Mapping
 
 import re
 
-from peggie.parser.parser import (
+from peggie.peg_parser.parser import (
     string_to_indentations,
     offset_to_line_and_column,
     RelativeIndentation,

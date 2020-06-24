@@ -7,7 +7,7 @@ import os
 
 import re
 
-from peggie.parser.parser import (
+from peggie.peg_parser.parser import (
     AltExpr,
     ConcatExpr,
     StarExpr,

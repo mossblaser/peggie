@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from peggie.parser.parser import (
+from peggie.peg_parser.parser import (
     ParseTree,
     Regex,
     Alt,
