@@ -23,7 +23,6 @@ from typing import (
     Sequence,
     Set,
     Tuple,
-    Type,
     TypeVar,
     Union,
 )
@@ -495,25 +494,6 @@ class ParseTree:
         """Iterate over child parse trees."""
         raise NotImplementedError()
 
-    def flatten(
-        self, keep: Tuple[Type["ParseTree"], ...] = ()
-    ) -> List[Union["ParseTree", str]]:
-        """
-        Return a flattened version of this parse tree.
-
-        By default, returns a flat list of strings (one for each Regex). If the
-        ``keep`` argument is given, it should be a tuple of
-        :py:class:`ParseTree` subclasses which should not be recursed into
-        while flattening.
-        """
-        if isinstance(self, keep):
-            return [self]
-        else:
-            out = []
-            for child in self.iter_children():
-                out.extend(child.flatten(keep))
-            return out
-
 
 @dataclass(frozen=True)
 class Alt(ParseTree):
@@ -584,14 +564,6 @@ class Regex(ParseTree):
 
     def iter_children(self) -> Iterable[ParseTree]:
         return iter(())
-
-    def flatten(
-        self, keep: Tuple[Type[ParseTree], ...] = ()
-    ) -> List[Union[ParseTree, str]]:
-        if isinstance(self, keep):
-            return [self]
-        else:
-            return [self.string]
 
 
 @dataclass(frozen=True)
