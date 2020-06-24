@@ -64,7 +64,7 @@ class GrammarTransformer(ParseTreeTransformer):
     :py:data:`peggie.parser.meta_grammar.grammar`.
     """
 
-    def Grammar(self, _pt: ParseTree, children: Any) -> Grammar:
+    def grammar(self, _pt: ParseTree, children: Any) -> Grammar:
         _spacing, definitions, _eof = children
         definitions = cast(List[Tuple[str, Expr]], definitions)
 
@@ -83,11 +83,11 @@ class GrammarTransformer(ParseTreeTransformer):
 
         return grammar
 
-    def Definition(self, _pt: ParseTree, children: Any) -> Tuple[str, Expr]:
+    def definition(self, _pt: ParseTree, children: Any) -> Tuple[str, Expr]:
         identifier, _arrow, expression = children
         return (cast(str, identifier), cast(Expr, expression))
 
-    def Expression(self, _pt: ParseTree, children: Any) -> Expr:
+    def expression(self, _pt: ParseTree, children: Any) -> Expr:
         expr, alternates = children
         if alternates:
             return AltExpr(
@@ -97,13 +97,13 @@ class GrammarTransformer(ParseTreeTransformer):
         else:
             return cast(Expr, expr)
 
-    def Sequence(self, _pt: ParseTree, children: List[Expr]) -> Expr:
+    def sequence(self, _pt: ParseTree, children: List[Expr]) -> Expr:
         if len(children) == 1:
             return children[0]
         else:
             return ConcatExpr(tuple(children))
 
-    def LookaheadPrefix(self, _pt: ParseTree, children: Any) -> Expr:
+    def lookahead_prefix(self, _pt: ParseTree, children: Any) -> Expr:
         prefix, expr = children
         if prefix is None:
             return cast(Expr, expr)
@@ -114,7 +114,7 @@ class GrammarTransformer(ParseTreeTransformer):
         else:
             raise TypeError(prefix[0])  # Unreachable
 
-    def AritySuffix(self, _pt: ParseTree, children: Any) -> Expr:
+    def arity_suffix(self, _pt: ParseTree, children: Any) -> Expr:
         expr, suffix = children
         if suffix is None:
             return cast(Expr, expr)
@@ -127,7 +127,7 @@ class GrammarTransformer(ParseTreeTransformer):
         else:
             raise TypeError(suffix[0])  # Unreachable
 
-    def IndentRulePrefix(self, _pt: ParseTree, children: Any) -> Expr:
+    def indent_rule_prefix(self, _pt: ParseTree, children: Any) -> Expr:
         indent_rule, expr = children
         if indent_rule is None:
             return cast(Expr, expr)
@@ -136,7 +136,7 @@ class GrammarTransformer(ParseTreeTransformer):
                 RelativeIndentation(indent_rule[0])
             )
 
-    def Primary(self, parse_tree: Alt, child: Any) -> Expr:
+    def primary(self, parse_tree: Alt, child: Any) -> Expr:
         if parse_tree.choice_index == 0:  # ( Expression )
             _open, expr, _close = child
             return cast(Expr, expr)
@@ -149,12 +149,12 @@ class GrammarTransformer(ParseTreeTransformer):
         else:
             raise TypeError(parse_tree.choice_index)  # Unreachable
 
-    def Class(self, _pt: ParseTree, children: Any) -> RegexExpr:
+    def class_(self, _pt: ParseTree, children: Any) -> RegexExpr:
         _open, lookaheads_and_ranges, _close, _spacing = children
         ranges = (cast(str, r) for _la, r in lookaheads_and_ranges)
         return RegexExpr(re.compile(r"[{}]".format("".join(ranges)), re.DOTALL))
 
-    def Range(self, parse_tree: Alt, child: Any) -> str:
+    def range(self, parse_tree: Alt, child: Any) -> str:
         if parse_tree.choice_index == 0:  # Range
             lhs, dash, rhs = cast(List[str], child)
             return re.escape(lhs) + dash + re.escape(rhs)
@@ -163,7 +163,7 @@ class GrammarTransformer(ParseTreeTransformer):
         else:
             raise TypeError(parse_tree.choice_index)  # Unreachable
 
-    def Char(self, _pt: ParseTree, children: Any) -> str:
+    def char(self, _pt: ParseTree, children: Any) -> str:
         if children[0] is None:
             return cast(str, children[1])
         else:
@@ -173,14 +173,14 @@ class GrammarTransformer(ParseTreeTransformer):
             else:
                 return backslash + char
 
-    def Literal(self, _pt: ParseTree, children: Any) -> RegexExpr:
+    def literal(self, _pt: ParseTree, children: Any) -> RegexExpr:
         regex_flag, _open, lookaheads_and_chars, _close, _spacing = children
         string = "".join(cast(str, c) for _la, c in lookaheads_and_chars)
         if regex_flag is None:
             string = re.escape(string)
         return RegexExpr(re.compile(string, re.DOTALL))
 
-    def Identifier(self, _pt: ParseTree, children: Any) -> str:
+    def identifier(self, _pt: ParseTree, children: Any) -> str:
         name, _spacing = children
         return cast(str, name)
 

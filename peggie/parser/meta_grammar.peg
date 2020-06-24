@@ -1,41 +1,41 @@
 # Hierarchical syntax
-Grammar          <- Spacing Definition+ EndOfFile
-Definition       <- Identifier LEFTARROW Expression
-Expression       <- Sequence (SLASH Sequence)*
-Sequence         <- LookaheadPrefix*
-LookaheadPrefix  <- (AND / NOT)? AritySuffix
-AritySuffix      <- IndentRulePrefix (QUESTION / STAR / PLUS)?
-IndentRulePrefix <- IndentRule? Primary
-Primary          <- OPEN Expression CLOSE
-                  / Literal / Class / DOT
-                  / Identifier !LEFTARROW
-Class            <- '[' (!']' Range)+ ']' Spacing
-Range            <- Char '-' Char / Char
+grammar            <- spacing definition+ end_of_file
+definition         <- identifier LEFTARROW expression
+expression         <- sequence (SLASH sequence)*
+sequence           <- lookahead_prefix*
+lookahead_prefix   <- (AND / NOT)? arity_suffix
+arity_suffix       <- indent_rule_prefix (QUESTION / STAR / PLUS)?
+indent_rule_prefix <- indent_rule? primary
+primary            <- OPEN expression CLOSE
+                    / literal / class / DOT
+                    / identifier !LEFTARROW
+class              <- '[' (!']' range)+ ']' spacing
+range              <- char '-' char / char
 
 # Lexical syntax
-Identifier <- r'[a-zA-Z_][a-zA-Z0-9_]*' Spacing
-Literal    <- 'r'? "'" (!"'" Char)* "'" Spacing
-            / 'r'? '"' (!'"' Char)* '"' Spacing
-Char       <- '\\' .
+identifier <- r'[a-zA-Z_][a-zA-Z0-9_]*' spacing
+literal    <- 'r'? "'" (!"'" char)* "'" spacing
+            / 'r'? '"' (!'"' char)* '"' spacing
+char       <- '\\' .
             / !'\\' .
 
-IndentRule <- r'@(\*|=|>=|>)' Spacing
+indent_rule <- r'@(\*|=|>=|>)' spacing
 
 # Symbols
-LEFTARROW  <- '<-' Spacing
-SLASH      <- '/' Spacing
-AND        <- '&' Spacing
-NOT        <- '!' Spacing
-QUESTION   <- '?' Spacing
-STAR       <- '*' Spacing
-PLUS       <- '+' Spacing
-OPEN       <- '(' Spacing
-CLOSE      <- ')' Spacing
-DOT        <- '.' Spacing
+LEFTARROW  <- '<-' spacing
+SLASH      <- '/' spacing
+AND        <- '&' spacing
+NOT        <- '!' spacing
+QUESTION   <- '?' spacing
+STAR       <- '*' spacing
+PLUS       <- '+' spacing
+OPEN       <- '(' spacing
+CLOSE      <- ')' spacing
+DOT        <- '.' spacing
 
 # Whitespace
-Spacing    <- (Space / Comment)*
-Comment    <- '#' (!EndOfLine .)* EndOfLine
-Space      <- [ \t] / EndOfLine
-EndOfLine  <- r'\r\n|\n\r|\n|\r'
-EndOfFile  <- !.
+spacing      <- (space / comment)*
+comment      <- '#' (!end_of_line .)* end_of_line
+space        <- [ \t] / end_of_line
+end_of_line  <- r'\r\n|\n\r|\n|\r'
+end_of_file  <- !.
