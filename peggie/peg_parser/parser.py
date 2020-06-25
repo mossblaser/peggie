@@ -733,10 +733,12 @@ class ParseError(Exception):
             expr.with_indentation(RelativeIndentation.any) for expr in last_resort_exprs
         }
 
-        out = []
-        last_resort = []
-        indentation_specified = []
+        # Accumulate explanations for all expected rules/regexes
+        #
+        # [(Explanation, last_resort, indentation_specified), ...]
+        explanations: List[Tuple[str, bool, bool]] = []
         for rule_or_regex, unmatched_indentations in self.expectations:
+            # Find explanation
             explanation: Optional[str]
             rule_or_regex_no_indent = rule_or_regex.with_indentation(
                 RelativeIndentation.any
@@ -753,6 +755,7 @@ class ParseError(Exception):
             if explanation is None:
                 continue
 
+            # Add indentation explanation(s)
             required_indentations = {
                 "{} {}".format(
                     unmatched_indentation.indentation.value[1:],
@@ -767,30 +770,39 @@ class ParseError(Exception):
                     " or ".join(sorted(required_indentations)),
                 )
 
-            if explanation not in out:
-                out.append(explanation)
-                last_resort.append(
-                    rule_or_regex.with_indentation(RelativeIndentation.any)
-                    in last_resort_exprs
+            if explanation not in [e for (e, _l, _i) in explanations]:
+                explanations.append(
+                    (
+                        explanation,
+                        rule_or_regex.with_indentation(RelativeIndentation.any)
+                        in last_resort_exprs,
+                        bool(required_indentations),
+                    )
                 )
-                indentation_specified.append(bool(required_indentations))
 
-        if not all(last_resort):
-            to_remove = [i for i, lr in enumerate(last_resort) if lr]
-            for i in reversed(to_remove):
-                del out[i]
-                del last_resort[i]
-                del indentation_specified[i]
+        # Hide last resort explanations unless they're all we've got
+        if not all(last_resort for _e, last_resort, _i in explanations):
+            explanations = [
+                (e, last_resort, i)
+                for e, last_resort, i in explanations
+                if not last_resort
+            ]
 
-        if just_indentation and any(indentation_specified):
-            to_remove = [i for i, ind in enumerate(indentation_specified) if not ind]
-            for i in reversed(to_remove):
-                del out[i]
-                del last_resort[i]
-                del indentation_specified[i]
+        # Hide non-indentation related explanations if any explanation relates
+        # to indentation (and just_indentation set)
+        if just_indentation and any(
+            indentation_specified for _e, _l, indentation_specified in explanations
+        ):
+            explanations = [
+                (e, l, indentation_specified)
+                for e, l, indentation_specified in explanations
+                if indentation_specified
+            ]
 
-        if out:
-            return "Expected {}".format(" or ".join(sorted(out)))
+        if explanations:
+            return "Expected {}".format(
+                " or ".join(sorted(explanation for explanation, _l, _i in explanations))
+            )
         else:
             return "Parsing failure"
 
