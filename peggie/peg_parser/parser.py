@@ -9,8 +9,6 @@ from collections import defaultdict
 
 from dataclasses import dataclass, replace
 
-from textwrap import indent
-
 from typing import (
     FrozenSet,
     Iterable,
@@ -25,6 +23,12 @@ from typing import (
     Tuple,
     TypeVar,
     Union,
+)
+
+from peggie.error_message_generation import (
+    offset_to_line_and_column,
+    extract_line,
+    format_error_message,
 )
 
 
@@ -48,24 +52,6 @@ def string_to_indentations(string: str) -> List[int]:
         indentation = len(line) - len(line.lstrip(" \t"))
         indentations.extend([indentation] * len(line))
     return indentations
-
-
-def offset_to_line_and_column(string: str, offset: int) -> Tuple[int, int]:
-    """
-    Return the (1-indexed) line and column number corresponding with the
-    specified offset.
-    """
-    lineno = 0
-    line = ""
-    remaining = offset
-    for lineno, line in enumerate(string.splitlines(keepends=True)):
-        if remaining < len(line):
-            return lineno + 1, remaining + 1
-        else:
-            remaining -= len(line)
-
-    # When beyond the end of the file, just point off the end of the last line
-    return lineno + 1, len(line) + 1
 
 
 class RelativeIndentation(Enum):
@@ -698,7 +684,7 @@ class ParseError(Exception):
         Tuple[Union[RuleExpr, RegexExpr], FrozenSet[Optional[AbsoluteIndentation]]]
     ]
 
-    def explain_expected(
+    def explain(
         self,
         expr_explanations: Mapping[Union[RuleExpr, RegexExpr], Optional[str]] = {},
         last_resort_exprs: Set[Union[RuleExpr, RegexExpr]] = set(),
@@ -806,31 +792,10 @@ class ParseError(Exception):
         else:
             return "Parsing failure"
 
-    def explain(
-        self,
-        expr_explanations: Mapping[Union[RuleExpr, RegexExpr], Optional[str]] = {},
-        last_resort_exprs: Set[Union[RuleExpr, RegexExpr]] = set(),
-        just_indentation: bool = False,
-    ) -> str:
-        """
-        Produce a human readable description of the parse error.
-
-        See :py:meth:`explain_expected` for argument meanings.
-        """
-        return "At line {} column {}:\n{}\n{}".format(
-            self.line,
-            self.column,
-            indent(
-                "{}\n{}^".format(self.snippet.rstrip(), " " * (self.column - 1)),
-                "    ",
-            ),
-            self.explain_expected(
-                expr_explanations, last_resort_exprs, just_indentation
-            ),
-        )
-
     def __str__(self) -> str:
-        return self.explain()
+        return format_error_message(
+            self.line, self.column, self.snippet, self.explain()
+        )
 
 
 class Parser:
@@ -1146,13 +1111,7 @@ class Parser:
             for rule_or_regex in expr.iter_first_rules_and_regexes(self._grammar)
         }
 
-        if self._string:
-            snippet = self._string.splitlines()[line - 1]
-        else:
-            # Special case: str.splitlines returns an empty list for the empty
-            # string
-            snippet = ""
-
+        snippet = extract_line(self._string, line)
         return ParseError(line, column, snippet, expectations)
 
     def parse(self, string: str) -> Rule:

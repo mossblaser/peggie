@@ -6,7 +6,6 @@ import re
 
 from peggie.peg_parser.parser import (
     string_to_indentations,
-    offset_to_line_and_column,
     RelativeIndentation,
     Parser,
     Expr,
@@ -70,33 +69,6 @@ from peggie.peg_parser.parser import (
 )
 def test_string_to_indentations(string: str, exp: List[int]) -> None:
     assert string_to_indentations(string) == exp
-
-
-@pytest.mark.parametrize(
-    "string, offset, exp_line, exp_column",
-    [
-        # Special case: Empty string
-        ("", 0, 1, 1),
-        # Special case: Beyond end of string
-        ("foobar", 111, 1, 7),
-        ("foobar\n", 111, 1, 8),
-        ("foo\nbar", 111, 2, 4),
-        # Single line
-        ("foobar", 0, 1, 1),
-        ("foobar", 3, 1, 4),
-        ("foobar", 5, 1, 6),
-        # Multiple lines
-        ("foo\nbar", 0, 1, 1),
-        ("foo\nbar", 2, 1, 3),
-        ("foo\nbar", 3, 1, 4),  # The newline
-        ("foo\nbar", 4, 2, 1),
-        ("foo\nbar", 6, 2, 3),
-    ],
-)
-def test_offset_to_line_and_column(
-    string: str, offset: int, exp_line: int, exp_column: int
-) -> None:
-    assert offset_to_line_and_column(string, offset) == (exp_line, exp_column)
 
 
 @pytest.mark.parametrize(
@@ -1139,10 +1111,8 @@ class TestParseError:
             ),
         ],
     )
-    def test_explain_expected_default(
-        self, parse_error: ParseError, exp_string: str
-    ) -> None:
-        assert parse_error.explain_expected() == exp_string
+    def test_explain_default(self, parse_error: ParseError, exp_string: str) -> None:
+        assert parse_error.explain() == exp_string
 
     @pytest.mark.parametrize(
         "expr_explanations, exp_string",
@@ -1168,7 +1138,7 @@ class TestParseError:
             ({RuleExpr("foo"): "X", RuleExpr("bar"): "X"}, "Expected X or baz"),
         ],
     )
-    def test_explain_expected_expr_explanations(
+    def test_explain_expr_explanations(
         self,
         expr_explanations: Mapping[Union[RuleExpr, RegexExpr], Optional[str]],
         exp_string: str,
@@ -1183,7 +1153,7 @@ class TestParseError:
                 (RuleExpr("baz", RelativeIndentation.equal), frozenset({None})),
             },
         )
-        assert parse_error.explain_expected(expr_explanations) == exp_string
+        assert parse_error.explain(expr_explanations) == exp_string
 
     @pytest.mark.parametrize(
         "parse_error, last_resort_exprs, exp_string",
@@ -1244,16 +1214,13 @@ class TestParseError:
             ),
         ],
     )
-    def test_explain_expected_last_resort(
+    def test_explain_last_resort(
         self,
         parse_error: ParseError,
         last_resort_exprs: Set[Union[RuleExpr, RegexExpr]],
         exp_string: str,
     ) -> None:
-        assert (
-            parse_error.explain_expected(last_resort_exprs=last_resort_exprs)
-            == exp_string
-        )
+        assert parse_error.explain(last_resort_exprs=last_resort_exprs) == exp_string
 
     @pytest.mark.parametrize(
         "just_indentation, exp_string_with_indentation, exp_string_without_indentation",
@@ -1277,7 +1244,7 @@ class TestParseError:
             ),
         ],
     )
-    def test_explain_expected_just_indentation(
+    def test_explain_just_indentation(
         self,
         just_indentation: bool,
         exp_string_with_indentation: str,
@@ -1312,19 +1279,15 @@ class TestParseError:
             },
         )
         assert (
-            parse_error_with_indentation.explain_expected(
-                just_indentation=just_indentation
-            )
+            parse_error_with_indentation.explain(just_indentation=just_indentation)
             == exp_string_with_indentation
         )
         assert (
-            parse_error_without_indentation.explain_expected(
-                just_indentation=just_indentation
-            )
+            parse_error_without_indentation.explain(just_indentation=just_indentation)
             == exp_string_without_indentation
         )
 
-    def test_explain_expected_last_resort_and_just_indentation(self) -> None:
+    def test_explain_last_resort_and_just_indentation(self) -> None:
         parse_error = ParseError(
             1,
             1,
@@ -1342,19 +1305,19 @@ class TestParseError:
             },
         )
 
-        assert parse_error.explain_expected(
+        assert parse_error.explain(
             last_resort_exprs={RuleExpr("bar")}, just_indentation=True,
         ) == ("Expected baz (with indentation = 10)")
 
-        assert parse_error.explain_expected(
+        assert parse_error.explain(
             last_resort_exprs={RuleExpr("bar"), RuleExpr("baz")}, just_indentation=True,
         ) == ("Expected foo")
 
-    def test_explain(self) -> None:
+    def test_str(self) -> None:
         parse_error = ParseError(
             123, 5, "foo bar", {(RuleExpr("baz"), frozenset({None}))}
         )
 
-        assert parse_error.explain() == (
+        assert str(parse_error) == (
             "At line 123 column 5:\n" "    foo bar\n" "        ^\n" "Expected baz"
         )
