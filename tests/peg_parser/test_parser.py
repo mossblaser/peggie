@@ -608,29 +608,7 @@ class TestParser:
             with pytest.raises(ParseError):
                 p.parse(string)
 
-    @pytest.mark.parametrize(
-        "string, exp_match",
-        [
-            # Foos with equal indentation
-            ("foo\nfoo\nfoo\n", True),
-            ("  foo\n  foo\n  foo\n", True),
-            # Foos with non-equal indentation
-            ("foo\n foo\n  foo\n", False),
-            ("foo\nfoo\n foo\n", False),
-            ("  foo\nfoo\nfoo\n", False),
-            # With internal indented blocks
-            ("foo\n bar\nfoo\n bar\nfoo\n", True),
-            # With non-indented 'bar' blocks
-            ("foo\nbar\nfoo\nbar\nfoo\n", False),
-            # With differently-indented internal indented blocks
-            ("foo\n  bar\nfoo\n bar\nfoo\n", True),
-            # Foos with non-equal indentation and indented blocks
-            ("foo\n bar\n foo\n bar\nfoo\n", False),
-        ],
-    )
-    def test_concat_ignore_empty_match_indentation(
-        self, string: str, exp_match: bool
-    ) -> None:
+    def test_concat_maybe_indentation_special_case(self) -> None:
         g = Grammar(
             {
                 "start": ConcatExpr(
@@ -643,30 +621,100 @@ class TestParser:
                             RegexExpr(re.compile(r"\s*bar\n\s*", re.DOTALL)),
                             RelativeIndentation.greater,
                         ),
-                        RegexExpr(
-                            re.compile(r"\s*foo\n\s*", re.DOTALL),
-                            RelativeIndentation.equal,
-                        ),
-                        MaybeExpr(
-                            RegexExpr(re.compile(r"\s*bar\n\s*", re.DOTALL)),
-                            RelativeIndentation.greater,
-                        ),
-                        RegexExpr(
-                            re.compile(r"\s*foo\n\s*", re.DOTALL),
-                            RelativeIndentation.equal,
-                        ),
-                        LookaheadExpr(RegexExpr(re.compile(r".", re.DOTALL))),
+                        MaybeExpr(RegexExpr(re.compile(r"\s*bar\n\s*", re.DOTALL)),),
                     )
                 )
             }
         )
         p = Parser(g)
 
-        if exp_match:
-            assert isinstance(p.parse(string), ParseTree)
-        else:
-            with pytest.raises(ParseError):
-                p.parse(string)
+        assert p.parse("  foo\n    bar\n") == Rule(
+            "start",
+            Concat((Regex("  foo\n    ", 0), Maybe(Regex("bar\n", 10)), Maybe(None),)),
+        )
+
+        assert p.parse("  foo\nbar\n") == Rule(
+            "start",
+            Concat((Regex("  foo\n", 0), Maybe(None), Maybe(Regex("bar\n", 6)),)),
+        )
+
+    def test_concat_star_indentation_special_case(self) -> None:
+        g = Grammar(
+            {
+                "start": ConcatExpr(
+                    (
+                        RegexExpr(
+                            re.compile(r"\s*foo\n\s*", re.DOTALL),
+                            RelativeIndentation.equal,
+                        ),
+                        StarExpr(
+                            RegexExpr(
+                                re.compile(r"\s*bar\n\s*", re.DOTALL),
+                                RelativeIndentation.equal,
+                            ),
+                            RelativeIndentation.greater,
+                        ),
+                        StarExpr(RegexExpr(re.compile(r"\s*bar\n\s*", re.DOTALL)),),
+                    )
+                )
+            }
+        )
+        p = Parser(g)
+
+        assert p.parse("  foo\n    bar\n    bar\n") == Rule(
+            "start",
+            Concat(
+                (
+                    Regex("  foo\n    ", 0),
+                    Star((Regex("bar\n    ", 10), Regex("bar\n", 18))),
+                    Star(()),
+                )
+            ),
+        )
+
+        assert p.parse("  foo\nbar\n  bar\n") == Rule(
+            "start",
+            Concat(
+                (
+                    Regex("  foo\n", 0),
+                    Star(()),
+                    Star((Regex("bar\n  ", 6), Regex("bar\n", 12))),
+                )
+            ),
+        )
+
+    def test_concat_alt_not_in_indentation_special_case(self) -> None:
+        g = Grammar(
+            {
+                "start": ConcatExpr(
+                    (
+                        RegexExpr(
+                            re.compile(r"\s*foo\n\s*", re.DOTALL),
+                            RelativeIndentation.equal,
+                        ),
+                        AltExpr(
+                            (
+                                RegexExpr(re.compile(r"\s*bar\n\s*", re.DOTALL)),
+                                EmptyExpr(),
+                            ),
+                            RelativeIndentation.greater,
+                        ),
+                        MaybeExpr(RegexExpr(re.compile(r"\s*bar\n\s*", re.DOTALL)),),
+                    )
+                ),
+            }
+        )
+        p = Parser(g)
+
+        assert p.parse("  foo\n    bar\n") == Rule(
+            "start",
+            Concat((Regex("  foo\n    ", 0), Alt(Regex("bar\n", 10), 0), Maybe(None),)),
+        )
+
+        # No special case behaviour here; bar is not indented correctly (even
+        # though the alt expr would have accepted empty)
+        with pytest.raises(ParseError):
+            p.parse("  foo\nbar\n")
 
     @pytest.mark.parametrize("expr_type", [StarExpr, PlusExpr])
     @pytest.mark.parametrize(

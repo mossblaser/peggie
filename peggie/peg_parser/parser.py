@@ -907,21 +907,30 @@ class Parser:
             old_num_parse_failures = len(self._parse_failures)
             before_offset = self._offset
             parse_tree = self._parse(sub_expr)
-            empty_string_matched = self._offset == before_offset
 
-            # Check subexpression is correctly indented (unless the empty
-            # string was matched in which case we allow arbitrary indentation,
-            # as a special case; e.g. for 'optional' subexpressions).
-            if not empty_string_matched:
-                indentation_problem = self._check_indent(
-                    sub_expr, start_offset, before_offset
-                )
-                if indentation_problem is not None:
-                    # NB: In the event of an mis-indented expression, we wish
-                    # for the indentation failure to be the most recent
-                    # failure. As such we must discard any other failures
-                    # encountered while matching the expression above.
-                    del self._parse_failures[old_num_parse_failures:]
+            # Check subexpression is correctly indented
+            indentation_problem = self._check_indent(
+                sub_expr, start_offset, before_offset
+            )
+            if indentation_problem is not None:
+                # NB: In the event of an mis-indented expression, we wish
+                # for the indentation failure to be the most recent
+                # failure. As such we must discard any other failures
+                # encountered while matching the expression above.
+                del self._parse_failures[old_num_parse_failures:]
+
+                # Special case: If a StarExpr or MaybeExpr is badly indented,
+                # treat it as an empty match rather than an indentation error.
+                # (If you really do want a Star or Maybe which matches something
+                # to fail when indentation fails to match you can wrap it in a
+                # concatenation with the empty string).
+                if isinstance(sub_expr, StarExpr):
+                    self._offset = before_offset
+                    parse_tree = Star(())
+                elif isinstance(sub_expr, MaybeExpr):
+                    self._offset = before_offset
+                    parse_tree = Maybe(None)
+                else:
                     self._offset = start_offset
                     return indentation_problem
 
