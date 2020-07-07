@@ -516,6 +516,9 @@ class Star(ParseTree):
 class Lookahead(ParseTree):
     """:py:class:`ParseTree` produced when a :py:class:`LookaheadExpr` is parsed."""
 
+    offset: int
+    """The character offset where this lookahead was matched."""
+
     def iter_children(self) -> Iterable[ParseTree]:
         return iter(())
 
@@ -556,6 +559,9 @@ class Regex(ParseTree):
 class Empty(ParseTree):
     """:py:class:`ParseTree` produced when a :py:class:`EmptyExpr` is parsed."""
 
+    offset: int
+    """The character offset where this empty was matched."""
+
     def iter_children(self) -> Iterable[ParseTree]:
         return iter(())
 
@@ -584,6 +590,9 @@ class Plus(ParseTree):
 @dataclass(frozen=True)
 class PositiveLookahead(ParseTree):
     """:py:class:`ParseTree` produced when a :py:class:`PositiveLookaheadExpr` is parsed."""
+
+    offset: int
+    """The character offset where this positive lookahead was matched."""
 
     def iter_children(self) -> Iterable[ParseTree]:
         return iter(())
@@ -848,7 +857,7 @@ class Parser:
         self._grammar = grammar
 
     def _parse_empty(self, expr: EmptyExpr) -> Empty:
-        return Empty()
+        return Empty(self._offset)
 
     def _parse_regex(self, expr: RegexExpr) -> Union[Regex, ParseFailure]:
         start_offset = self._offset
@@ -982,7 +991,7 @@ class Parser:
             if parse_tree:
                 return UnmatchedExpression(expr, self._offset)
             else:
-                return Lookahead()
+                return Lookahead(self._offset)
         finally:
             # Erase all failures noted during the lookahead
             del self._parse_failures[old_num_parse_failures:]
@@ -1038,7 +1047,7 @@ class Parser:
         # grammar.
         parse_tree = self._parse_lookahead(lookahead_expr)
         if not parse_tree:
-            return PositiveLookahead()
+            return PositiveLookahead(self._offset)
         else:
             return UnmatchedExpression(expr, self._offset)
 

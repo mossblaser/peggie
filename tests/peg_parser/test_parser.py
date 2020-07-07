@@ -335,8 +335,14 @@ class TestParser:
         "start_expr, string, exp",
         [
             # EmptyExpr
-            (EmptyExpr(), "", Empty()),
-            (EmptyExpr(), "foo", Empty()),
+            (EmptyExpr(), "", Empty(0)),
+            (EmptyExpr(), "foo", Empty(0)),
+            # EmptyExpr: Non-zero offset
+            (
+                ConcatExpr((RegexExpr(re.compile("foo")), EmptyExpr())),
+                "foobar",
+                Concat((Regex("foo", 0), Empty(3))),
+            ),
             # RegexExpr
             (RegexExpr(re.compile(r"..")), "foo", Regex("fo", 0)),
             (RegexExpr(re.compile(r"fo*")), "foo", Regex("foo", 0)),
@@ -388,12 +394,12 @@ class TestParser:
                 None,
             ),
             # ConcatExpr: Matching empty at start of string
-            (ConcatExpr((EmptyExpr(), EmptyExpr())), "", Concat((Empty(), Empty()))),
+            (ConcatExpr((EmptyExpr(), EmptyExpr())), "", Concat((Empty(0), Empty(0)))),
             # ConcatExpr: Matching empty at end of string
             (
                 ConcatExpr((RegexExpr(re.compile(r"f")), EmptyExpr())),
                 "f",
-                Concat((Regex("f", 0), Empty())),
+                Concat((Regex("f", 0), Empty(1))),
             ),
             # ConcatExpr: Neither matches
             (
@@ -416,7 +422,7 @@ class TestParser:
             # StarExpr: Special case: empty string
             (StarExpr(RegexExpr(re.compile(r"x"))), "", Star(()),),
             # LookaheadExpr: match end-of-input
-            (LookaheadExpr(RegexExpr(re.compile(r"."))), "", Lookahead(),),
+            (LookaheadExpr(RegexExpr(re.compile(r"."))), "", Lookahead(0),),
             (LookaheadExpr(RegexExpr(re.compile(r"."))), "foo", None,),
             # LookaheadExpr: doesn't consume input
             (
@@ -427,7 +433,18 @@ class TestParser:
                     )
                 ),
                 "foobar",
-                Concat((Lookahead(), Regex("foo", 0))),
+                Concat((Lookahead(0), Regex("foo", 0))),
+            ),
+            # LookaheadExpr: Non-zero offset
+            (
+                ConcatExpr(
+                    (
+                        RegexExpr(re.compile("foo")),
+                        LookaheadExpr(RegexExpr(re.compile("XXX"))),
+                    )
+                ),
+                "foobar",
+                Concat((Regex("foo", 0), Lookahead(3))),
             ),
             # LookaheadExpr: Positive lookahead
             (
@@ -438,7 +455,7 @@ class TestParser:
                     )
                 ),
                 "foobar",
-                Concat((Lookahead(), Regex("foo", 0))),
+                Concat((Lookahead(0), Regex("foo", 0))),
             ),
             (
                 ConcatExpr(
@@ -462,7 +479,7 @@ class TestParser:
                     )
                 ),
                 "",
-                Alt(Lookahead(), 1),
+                Alt(Lookahead(0), 1),
             ),
             (
                 AltExpr(
@@ -482,7 +499,7 @@ class TestParser:
                                     Concat(
                                         (
                                             Regex("x", 1),
-                                            Rule("start", Alt(Lookahead(), 1)),
+                                            Rule("start", Alt(Lookahead(2), 1)),
                                         )
                                     ),
                                     0,
@@ -496,7 +513,7 @@ class TestParser:
             # MaybeExpr
             (MaybeExpr(RegexExpr(re.compile("foo"))), "foo", Maybe(Regex("foo", 0))),
             (MaybeExpr(RegexExpr(re.compile("bar"))), "foo", Maybe(None)),
-            (MaybeExpr(EmptyExpr()), "", Maybe(Empty())),
+            (MaybeExpr(EmptyExpr()), "", Maybe(Empty(0))),
             # PlusExpr: Doesn't match none
             (PlusExpr(RegexExpr(re.compile(r"y"))), "", None),
             (PlusExpr(RegexExpr(re.compile(r"y"))), "xxx", None),
@@ -518,9 +535,20 @@ class TestParser:
             (
                 PositiveLookaheadExpr(RegexExpr(re.compile("foo"))),
                 "foo",
-                PositiveLookahead(),
+                PositiveLookahead(0),
             ),
             (PositiveLookaheadExpr(RegexExpr(re.compile("foo"))), "bar", None),
+            # PositiveLookaheadExpr: Non-zero offset
+            (
+                ConcatExpr(
+                    (
+                        RegexExpr(re.compile("foo")),
+                        PositiveLookaheadExpr(RegexExpr(re.compile("bar"))),
+                    )
+                ),
+                "foobar",
+                Concat((Regex("foo", 0), PositiveLookahead(3))),
+            ),
         ],
     )
     def test_basic_parsing(

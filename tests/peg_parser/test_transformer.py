@@ -65,9 +65,9 @@ from peggie.peg_parser.transformer import ParseTreeTransformer
         # Rules should pass their contents transformed without extra wrapping
         (Rule("xxx", Concat((Regex("foo", 0), Regex("bar", 3)))), ["foo", "bar"]),
         # Empty, Lookahead and PositiveLookahead should be shown as None
-        (Empty(), None),
-        (Lookahead(), None),
-        (PositiveLookahead(), None),
+        (Empty(0), None),
+        (Lookahead(0), None),
+        (PositiveLookahead(0), None),
     ],
 )
 def test_default_transformation(parse_tree: ParseTree, exp_out: Any) -> None:
@@ -115,24 +115,24 @@ def test_custom_rule_enter() -> None:
 
     class MyTransformer(ParseTreeTransformer):
         def foo_enter(self, parse_tree: ParseTree) -> None:
-            assert parse_tree == Concat((Rule("bar", Empty()), Rule("bar", Empty())))
+            assert parse_tree == Concat((Rule("bar", Empty(0)), Rule("bar", Empty(0))))
             call_log.append("foo_enter")
 
         def foo(self, parse_tree: ParseTree, transformed_children: Any) -> Any:
             call_log.append("foo")
-            assert parse_tree == Concat((Rule("bar", Empty()), Rule("bar", Empty())))
+            assert parse_tree == Concat((Rule("bar", Empty(0)), Rule("bar", Empty(0))))
             assert transformed_children == ["bar", "bar"]
             return "foo"
 
         def bar(self, parse_tree: ParseTree, transformed_children: Any) -> Any:
             call_log.append("bar")
-            assert parse_tree == Empty()
+            assert parse_tree == Empty(0)
             assert transformed_children is None
             return "bar"
 
     t = MyTransformer()
     assert (
-        t.transform(Rule("foo", Concat((Rule("bar", Empty()), Rule("bar", Empty())))))
+        t.transform(Rule("foo", Concat((Rule("bar", Empty(0)), Rule("bar", Empty(0))))))
         == "foo"
     )
     assert call_log == ["foo_enter", "bar", "bar", "foo"]
