@@ -75,16 +75,26 @@ def test_default_transformation(parse_tree: ParseTree, exp_out: Any) -> None:
     assert t.transform(parse_tree) == exp_out
 
 
-def test_custom_transform_regex() -> None:
+def test_custom_transform_regex_empty_lookahead_and_positive_lookahead() -> None:
     class MyTransformer(ParseTreeTransformer):
         def _transform_regex(self, regex: Regex) -> Any:
             return regex
 
+        def _transform_empty(self, empty: Empty) -> Any:
+            return empty
+
+        def _transform_lookahead(self, lookahead: Lookahead) -> Any:
+            return lookahead
+
+        def _transform_positive_lookahead(
+            self, positive_lookahead: PositiveLookahead
+        ) -> Any:
+            return positive_lookahead
+
     t = MyTransformer()
-    assert t.transform(Concat((Regex("foo", 0), Regex("bar", 3)))) == [
-        Regex("foo", 0),
-        Regex("bar", 3),
-    ]
+    assert t.transform(
+        Concat((Regex("foo", 0), Empty(3), Lookahead(4), PositiveLookahead(5)))
+    ) == [Regex("foo", 0), Empty(3), Lookahead(4), PositiveLookahead(5)]
 
 
 def test_custom_rule_transformers() -> None:

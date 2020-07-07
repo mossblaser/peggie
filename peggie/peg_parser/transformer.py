@@ -32,6 +32,11 @@ class ParseTreeTransformer:
 
     The default transformation for Regex values is to return the matched
     string. This can be changed by overriding :py:meth:`_transform_regex`.
+
+    The default transformation for Empty, Lookahead and PositiveLookahead
+    values is to return None. This can be changed by overriding
+    :py:meth:`_transform_empty`, :py:meth:`_transform_lookahead` or
+    :py:meth:`_transform_positive_lookahead` methods.
     """
 
     def transform(self, tree: ParseTree) -> Any:
@@ -47,8 +52,12 @@ class ParseTreeTransformer:
                 return self.transform(tree.value)
             else:
                 return None
-        elif isinstance(tree, (Empty, Lookahead, PositiveLookahead)):
-            return None
+        elif isinstance(tree, Empty):
+            return self._transform_empty(tree)
+        elif isinstance(tree, Lookahead):
+            return self._transform_lookahead(tree)
+        elif isinstance(tree, PositiveLookahead):
+            return self._transform_positive_lookahead(tree)
         elif isinstance(tree, Rule):
             enter_fn = getattr(self, "{}_enter".format(tree.name), None)
             if enter_fn is not None:
@@ -71,6 +80,32 @@ class ParseTreeTransformer:
         may be overridden to return custom values instead.
         """
         return regex.string
+
+    def _transform_empty(self, empty: Empty) -> Any:
+        """
+        The default transformation for Empty.
+
+        This default implementation returns None.
+        """
+        return None
+
+    def _transform_lookahead(self, lookahead: Lookahead) -> Any:
+        """
+        The default transformation for Lookahead.
+
+        This default implementation returns None.
+        """
+        return None
+
+    def _transform_positive_lookahead(
+        self, positive_lookahead: PositiveLookahead
+    ) -> Any:
+        """
+        The default transformation for PositiveLookahead.
+
+        This default implementation returns None.
+        """
+        return None
 
     def _default(self, tree: ParseTree, transformed_children: Any) -> Any:
         """The default transformation for rules."""
