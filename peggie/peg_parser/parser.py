@@ -2,6 +2,7 @@
 A Packrat Parsing Expression Grammar (PEG) Parser implementation.
 """
 
+import re
 
 from enum import Enum
 
@@ -354,10 +355,25 @@ class RuleExpr(Expr):
 
 @dataclass(frozen=True)
 class RegexExpr(Expr):
-    """Match a compiled :py:mod:`re` regular expression."""
+    """
+    Match a compiled :py:mod:`re` regular expression. If a string is provided,
+    it will be compiled into a regular expression with the :py:data:`re.DOTALL`
+    flag set.
+    """
 
     pattern: Pattern[str]
     indentation: RelativeIndentation = RelativeIndentation.any
+
+    def __init__(
+        self,
+        pattern: Union[Pattern[str], str],
+        indentation: RelativeIndentation = RelativeIndentation.any,
+    ) -> None:
+        if isinstance(pattern, str):
+            pattern = re.compile(pattern, re.DOTALL)
+
+        object.__setattr__(self, "pattern", pattern)
+        object.__setattr__(self, "indentation", indentation)
 
     def iter_subexpressions(self, grammar: "Grammar") -> Iterable["Expr"]:
         return iter(())

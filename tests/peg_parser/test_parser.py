@@ -99,6 +99,10 @@ def test_relative_indentation(
 
 
 class TestExpr:
+    def test_regex_expr_constructor(self) -> None:
+        assert RegexExpr("foo").pattern == re.compile("foo", re.DOTALL)
+        assert RegexExpr(re.compile("foo")).pattern == re.compile("foo")
+
     @pytest.mark.parametrize(
         "expr, exp_matches_empty",
         [
