@@ -720,7 +720,7 @@ class AbsoluteIndentation(NamedTuple):
     """The indentation level the rule is relative to."""
 
     indentation: RelativeIndentation
-    """The required (unmet) indentation rule."""
+    """The required (unmet) :py:class:`RelativeIndentation` rule."""
 
 
 @dataclass
@@ -728,7 +728,7 @@ class ParseError(Exception):
     """
     Thrown when parsing fails.
 
-    Attributes
+    Parameters
     ----------
     line : int
         One-indexed line number where the error occurred.

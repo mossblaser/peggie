@@ -22,6 +22,10 @@ from peggie.peg_parser.parser import (
 grammar_source = open(
     os.path.join(os.path.dirname(__file__), "meta_grammar.peg"), "r"
 ).read()
+"""
+A textual description of the meta grammar which matches PEG grammar
+specifications.
+"""
 
 grammar: Grammar = Grammar(
     start_rule="grammar",
