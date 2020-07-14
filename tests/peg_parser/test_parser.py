@@ -1230,6 +1230,8 @@ class TestParseError:
             },
         )
         assert parse_error.explain(expr_explanations) == exp_string
+        parse_error.expr_explanations = expr_explanations
+        assert parse_error.explain() == exp_string
 
     @pytest.mark.parametrize(
         "parse_error, last_resort_exprs, exp_string",
@@ -1297,6 +1299,8 @@ class TestParseError:
         exp_string: str,
     ) -> None:
         assert parse_error.explain(last_resort_exprs=last_resort_exprs) == exp_string
+        parse_error.last_resort_exprs = last_resort_exprs
+        assert parse_error.explain() == exp_string
 
     @pytest.mark.parametrize(
         "just_indentation, exp_string_with_indentation, exp_string_without_indentation",
@@ -1388,6 +1392,14 @@ class TestParseError:
         assert parse_error.explain(
             last_resort_exprs={RuleExpr("bar"), RuleExpr("baz")}, just_indentation=True,
         ) == ("Expected foo")
+
+        parse_error.last_resort_exprs = {RuleExpr("bar")}
+        parse_error.just_indentation = True
+        assert parse_error.explain() == "Expected baz (with indentation = 10)"
+
+        parse_error.last_resort_exprs = {RuleExpr("bar"), RuleExpr("baz")}
+        parse_error.just_indentation = True
+        assert parse_error.explain() == "Expected foo"
 
     def test_str(self) -> None:
         parse_error = ParseError(

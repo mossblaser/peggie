@@ -7,7 +7,7 @@ from enum import Enum
 
 from collections import defaultdict
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, replace, field
 
 from typing import (
     FrozenSet,
@@ -667,7 +667,7 @@ class AbsoluteIndentation(NamedTuple):
     """The required (unmet) indentation rule."""
 
 
-@dataclass(frozen=True)
+@dataclass
 class ParseError(Exception):
     """
     Thrown when parsing fails.
@@ -684,6 +684,21 @@ class ParseError(Exception):
         The set of :py:class:`RuleExpr` and :py:class:`RegexExpr` expressions
         which the parser would have accepted at this point, along any required
         differences in indentation.
+    expr_explanations : {rule_or_regex: str or None, ...}
+        Error message customization parameter. By default expected
+        :py:class:`.Rule` are shown as their rule name and :py:class:`.Regex`
+        as their pattern (in quotes). This representation may be overridden by
+        a string entry in this dictionary. Alternatively, an expression may be
+        suppressed from the explanation by providing None.  Default = {}.
+    last_resort_exprs : {rule_or_regex, ...}
+        Error message customization parameter. A set of :py:class:`.Rule` or
+        :py:class:`.Regex` expressions which are ordinarily suppressed from
+        explanations except when these are the only matching expressions in
+        which case they are included. Default = {}.
+    just_indentation : bool
+        Error message customization parameter. If True, when at least one
+        expression with an indentation requirement is present, non-indentation
+        related expectations are suppressed. Default = False.
     """
 
     line: int
@@ -693,11 +708,19 @@ class ParseError(Exception):
         Tuple[Union[RuleExpr, RegexExpr], FrozenSet[Optional[AbsoluteIndentation]]]
     ]
 
+    expr_explanations: Mapping[Union[RuleExpr, RegexExpr], Optional[str]] = field(
+        default_factory=dict
+    )
+    last_resort_exprs: Set[Union[RuleExpr, RegexExpr]] = field(default_factory=set)
+    just_indentation: bool = field(default=False)
+
     def explain(
         self,
-        expr_explanations: Mapping[Union[RuleExpr, RegexExpr], Optional[str]] = {},
-        last_resort_exprs: Set[Union[RuleExpr, RegexExpr]] = set(),
-        just_indentation: bool = False,
+        expr_explanations: Optional[
+            Mapping[Union[RuleExpr, RegexExpr], Optional[str]]
+        ] = None,
+        last_resort_exprs: Optional[Set[Union[RuleExpr, RegexExpr]]] = None,
+        just_indentation: Optional[bool] = None,
     ) -> str:
         """
         Return a human-readable string describing the expected next values.
@@ -705,19 +728,19 @@ class ParseError(Exception):
         Parameters
         ----------
         expr_explanations : {rule_or_regex: str or None, ...}
-            By default expected rules are shown as their rule name and regexes
-            as their pattern (in quotes). This representation may be overridden
-            here (by providing a string) or a given expression suppressed from
-            the explanation (by providing None).
+            See :py:attr:`expr_explanations`.
         last_resort_exprs : {rule_or_regex, ...}
-            A set of rule or regex expressions which are ordinarily suppressed
-            from explanations except when these are the only matching
-            expressions in which case they are included.
+            See :py:attr:`last_resort_exprs`.
         just_indentation : bool
-            If True, when at least one expression with an indentation
-            requirement is present, non-indentation related expectations are
-            suppressed.
+            See :py:attr:`just_indentation`.
         """
+        if expr_explanations is None:
+            expr_explanations = self.expr_explanations
+        if last_resort_exprs is None:
+            last_resort_exprs = self.last_resort_exprs
+        if just_indentation is None:
+            just_indentation = self.just_indentation
+
         # Strip indentation specs from expressions to ensure just rule names or
         # patterns are matched
         expr_explanations = {
