@@ -27,6 +27,14 @@ from peggie.peg_parser.parser import (
 import re
 
 
+__all__ = [
+    "GrammarCompileError",
+    "RuleDefinedMultipleTimesError",
+    "GrammarNotWellFormedError",
+    "compile_grammar",
+]
+
+
 class GrammarCompileError(Exception):
     """Thrown during grammar compilation if the grammar is not valid."""
 
@@ -188,6 +196,10 @@ class GrammarTransformer(ParseTreeTransformer):
 def compile_grammar(grammar_spec: str) -> Grammar:
     """
     Parse and compile a PEG grammar from a string.
+
+    Throws a :py:exc:`GrammarCompileError` exception if the supplied grammar is
+    not well formed or a :py:exc:`.ParseError` if the grammar specification
+    contains a syntax error.
     """
     parser = Parser(meta_grammar)
     parse_tree = parser.parse(grammar_spec)

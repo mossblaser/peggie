@@ -13,6 +13,10 @@ from peggie.peg_parser.parser import (
     Rule,
 )
 
+__all__ = [
+    "ParseTreeTransformer",
+]
+
 
 class ParseTreeTransformer:
     """

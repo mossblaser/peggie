@@ -33,6 +33,46 @@ from peggie.error_message_generation import (
 )
 
 
+__all__ = [
+    "RelativeIndentation",
+    "GrammarWellFormedness",
+    "WellFormed",
+    "UndefinedRule",
+    "LeftRecursion",
+    "RepeatedEmptyTerm",
+    "Expr",
+    "AltExpr",
+    "ConcatExpr",
+    "StarExpr",
+    "LookaheadExpr",
+    "RuleExpr",
+    "RegexExpr",
+    "EmptyExpr",
+    "MaybeExpr",
+    "PlusExpr",
+    "PositiveLookaheadExpr",
+    "Grammar",
+    "ParseTree",
+    "Alt",
+    "Concat",
+    "Star",
+    "Lookahead",
+    "Rule",
+    "Regex",
+    "Empty",
+    "Maybe",
+    "Plus",
+    "PositiveLookahead",
+    "GrammarError",
+    "RepeatedEmptyTermError",
+    "LeftRecursionError",
+    "UndefinedRuleError",
+    "AbsoluteIndentation",
+    "ParseError",
+    "Parser",
+]
+
+
 def string_to_indentations(string: str) -> List[int]:
     r"""
     Return the indentation level associated with each char in a string.
@@ -847,7 +887,16 @@ class ParseError(Exception):
 
 
 class Parser:
-    """A Packrat PEG parser."""
+    """
+    A parser.
+
+    Strings are parsed using the :py:meth:`parse` method.
+
+    Parameters
+    ----------
+    grammar : :py:class:`Grammar`
+        The grammar describing the language to be parsed.
+    """
 
     _grammar: Grammar
     """The :py:class:`Grammar` to be parsed."""
@@ -1173,8 +1222,8 @@ class Parser:
 
     def parse(self, string: str) -> Rule:
         """
-        Parse a string, returning the parse tree, if successful, and raises
-        :py:exc:`ParseError` otherwise.
+        Parse a string, returning the :py:class:`ParseTree` if successful or
+        raising a :py:exc:`ParseError` if not.
         """
         self._string = string
         self._indentations = string_to_indentations(self._string)
