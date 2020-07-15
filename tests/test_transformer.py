@@ -2,7 +2,7 @@ import pytest  # type: ignore
 
 from typing import Any
 
-from peggie.peg_parser.parser import (
+from peggie.parser import (
     ParseTree,
     Alt,
     Concat,
@@ -16,7 +16,7 @@ from peggie.peg_parser.parser import (
     PositiveLookahead,
 )
 
-from peggie.peg_parser.transformer import ParseTreeTransformer
+from peggie.transformer import ParseTreeTransformer
 
 
 @pytest.mark.parametrize(

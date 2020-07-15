@@ -2,7 +2,7 @@ import pytest  # type: ignore
 
 import re
 
-from peggie.peg_parser.parser import (
+from peggie.parser import (
     Expr,
     RegexExpr,
     RuleExpr,
@@ -17,12 +17,12 @@ from peggie.peg_parser.parser import (
     LeftRecursion,
 )
 
-from peggie.peg_parser.meta_grammar import (
+from peggie.meta_grammar import (
     grammar,
     grammar_source,
 )
 
-from peggie.peg_parser.grammar_compiler import (
+from peggie.grammar_compiler import (
     compile_grammar,
     RuleDefinedMultipleTimesError,
     GrammarNotWellFormedError,

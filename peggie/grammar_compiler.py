@@ -2,11 +2,11 @@ from typing import Any, Mapping, Tuple, List, cast
 
 from collections import Counter
 
-from peggie.peg_parser.transformer import ParseTreeTransformer
+from peggie.transformer import ParseTreeTransformer
 
-from peggie.peg_parser.meta_grammar import grammar as meta_grammar
+from peggie.meta_grammar import grammar as meta_grammar
 
-from peggie.peg_parser.parser import (
+from peggie.parser import (
     Parser,
     RelativeIndentation,
     Expr,
