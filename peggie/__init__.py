@@ -1,6 +1,6 @@
 r"""
-The :py:mod:`peggie` module implements a simple parsing library which may be
-used to parse text-based inputs given a suitable grammar.
+Peggie is a simple parsing library which may be used to parse
+text-based inputs given a suitable grammar.
 
 Specifically, this parser implements a variant of the Parsing Expression
 Grammars (PEG) [PEG]_ formalism with extensions to support indentation
@@ -9,9 +9,6 @@ The parser itself uses the Packrat [Packrat]_ algorithm and is implemented in
 pure Python. This parser distinguishes itself from other Python-based parsing
 libraries in supporting indentation sensitivity directly rather than as a
 (typically only semi-supported) bolt-on to the lexing process.
-
-
-
 
 Basic usage
 ===========
@@ -429,6 +426,14 @@ Grammars must adhere to the following well-formedness rules:
 
 If a grammar does not meet these criteria, a :py:exc:`.GrammarCompileError`
 will be thrown during grammar compilation.
+
+
+Unprocessed input
+-----------------
+
+In common with other PEG parsers, the parser will not throw an error if the
+whole input is not parsed. To ensure the whole input is matched by the grammar,
+use the ``!.`` idiom which matches only at the end of the input.
 
 
 Error messages
