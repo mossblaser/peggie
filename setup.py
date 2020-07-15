@@ -23,6 +23,7 @@ setup(
         "Operating System :: Microsoft :: Windows",
         "Operating System :: MacOS",
         "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.7",
     ],
     keywords="PEG parser",
     entry_points={"console_scripts": []},
