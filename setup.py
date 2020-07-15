@@ -27,4 +27,5 @@ setup(
     ],
     keywords="PEG parser",
     entry_points={"console_scripts": []},
+    zip_safe=False,
 )
