@@ -505,7 +505,7 @@ For example::
     ...     RuleExpr("space"): "<space>",
     ...     RuleExpr("value"): "<number>",
     ...     RuleExpr("summation"): "<number>",
-    ...     RegexExpr(r"\+"): "'+'",
+    ...     RegexExpr.literal("+"): "'+'",
     ... }
 
     >>> try:
@@ -639,6 +639,7 @@ concatenations of other expressions).
 .. autoclass:: EmptyExpr
 
 .. autoclass:: RegexExpr
+    :members: literal
 
 .. autoclass:: RuleExpr
 

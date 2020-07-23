@@ -5,8 +5,6 @@ A compiled grammar for the grammar syntax supported by this parser. See also
 
 import os
 
-import re
-
 from peggie.parser import (
     AltExpr,
     ConcatExpr,
@@ -78,46 +76,39 @@ grammar: Grammar = Grammar(
             )
         ),
         "identifier": ConcatExpr(
-            (
-                RegexExpr(re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*", re.DOTALL)),
-                RuleExpr("spacing"),
-            )
+            (RegexExpr(r"[a-zA-Z_][a-zA-Z0-9_]*"), RuleExpr("spacing"),)
         ),
         "literal": AltExpr(
             (
                 ConcatExpr(
                     (
-                        MaybeExpr(RegexExpr(re.compile(r"r", re.DOTALL))),
-                        RegexExpr(re.compile(r"\'", re.DOTALL)),
+                        MaybeExpr(RegexExpr.literal("r")),
+                        RegexExpr.literal("'"),
                         StarExpr(
                             ConcatExpr(
                                 (
-                                    LookaheadExpr(
-                                        RegexExpr(re.compile(r"\'", re.DOTALL))
-                                    ),
+                                    LookaheadExpr(RegexExpr.literal("'")),
                                     RuleExpr("char"),
                                 )
                             ),
                         ),
-                        RegexExpr(re.compile(r"\'", re.DOTALL)),
+                        RegexExpr.literal("'"),
                         RuleExpr("spacing"),
                     )
                 ),
                 ConcatExpr(
                     (
-                        MaybeExpr(RegexExpr(re.compile(r"r", re.DOTALL))),
-                        RegexExpr(re.compile(r"\"", re.DOTALL)),
+                        MaybeExpr(RegexExpr.literal("r")),
+                        RegexExpr.literal('"'),
                         StarExpr(
                             ConcatExpr(
                                 (
-                                    LookaheadExpr(
-                                        RegexExpr(re.compile(r"\"", re.DOTALL))
-                                    ),
+                                    LookaheadExpr(RegexExpr.literal('"')),
                                     RuleExpr("char"),
                                 )
                             ),
                         ),
-                        RegexExpr(re.compile(r"\"", re.DOTALL)),
+                        RegexExpr.literal('"'),
                         RuleExpr("spacing"),
                     )
                 ),
@@ -125,100 +116,56 @@ grammar: Grammar = Grammar(
         ),
         "class": ConcatExpr(
             (
-                RegexExpr(re.compile(r"\[", re.DOTALL)),
+                RegexExpr.literal("["),
                 PlusExpr(
                     ConcatExpr(
-                        (
-                            LookaheadExpr(RegexExpr(re.compile(r"\]", re.DOTALL))),
-                            RuleExpr("range"),
-                        )
+                        (LookaheadExpr(RegexExpr.literal("]")), RuleExpr("range"),)
                     ),
                 ),
-                RegexExpr(re.compile(r"\]", re.DOTALL)),
+                RegexExpr.literal("]"),
                 RuleExpr("spacing"),
             )
         ),
         "range": AltExpr(
             (
                 ConcatExpr(
-                    (
-                        RuleExpr("char"),
-                        RegexExpr(re.compile(r"\-", re.DOTALL)),
-                        RuleExpr("char"),
-                    )
+                    (RuleExpr("char"), RegexExpr.literal("-"), RuleExpr("char"),)
                 ),
                 RuleExpr("char"),
             )
         ),
         "char": AltExpr(
             (
-                ConcatExpr(
-                    (
-                        RegexExpr(re.compile(r"\\", re.DOTALL)),
-                        RegexExpr(re.compile(r".", re.DOTALL)),
-                    )
-                ),
-                ConcatExpr(
-                    (
-                        LookaheadExpr(RegexExpr(re.compile(r"\\", re.DOTALL))),
-                        RegexExpr(re.compile(r".", re.DOTALL)),
-                    )
-                ),
+                ConcatExpr((RegexExpr.literal("\\"), RegexExpr(r"."),)),
+                ConcatExpr((LookaheadExpr(RegexExpr.literal("\\")), RegexExpr(r"."),)),
             )
         ),
-        "indent_rule": ConcatExpr(
-            (RegexExpr(re.compile(r"@(\*|=|>=|>)", re.DOTALL)), RuleExpr("spacing"),)
-        ),
-        "LEFTARROW": ConcatExpr(
-            (RegexExpr(re.compile(r"\<\-", re.DOTALL)), RuleExpr("spacing"))
-        ),
-        "SLASH": ConcatExpr(
-            (RegexExpr(re.compile(r"\/", re.DOTALL)), RuleExpr("spacing"))
-        ),
-        "AND": ConcatExpr(
-            (RegexExpr(re.compile(r"\&", re.DOTALL)), RuleExpr("spacing"))
-        ),
-        "NOT": ConcatExpr(
-            (RegexExpr(re.compile(r"\!", re.DOTALL)), RuleExpr("spacing"))
-        ),
-        "QUESTION": ConcatExpr(
-            (RegexExpr(re.compile(r"\?", re.DOTALL)), RuleExpr("spacing"))
-        ),
-        "STAR": ConcatExpr(
-            (RegexExpr(re.compile(r"\*", re.DOTALL)), RuleExpr("spacing"))
-        ),
-        "PLUS": ConcatExpr(
-            (RegexExpr(re.compile(r"\+", re.DOTALL)), RuleExpr("spacing"))
-        ),
-        "OPEN": ConcatExpr(
-            (RegexExpr(re.compile(r"\(", re.DOTALL)), RuleExpr("spacing"))
-        ),
-        "CLOSE": ConcatExpr(
-            (RegexExpr(re.compile(r"\)", re.DOTALL)), RuleExpr("spacing"))
-        ),
-        "DOT": ConcatExpr(
-            (RegexExpr(re.compile(r"\.", re.DOTALL)), RuleExpr("spacing"))
-        ),
+        "indent_rule": ConcatExpr((RegexExpr(r"@(\*|=|>=|>)"), RuleExpr("spacing"),)),
+        "LEFTARROW": ConcatExpr((RegexExpr.literal("<-"), RuleExpr("spacing"))),
+        "SLASH": ConcatExpr((RegexExpr.literal("/"), RuleExpr("spacing"))),
+        "AND": ConcatExpr((RegexExpr.literal("&"), RuleExpr("spacing"))),
+        "NOT": ConcatExpr((RegexExpr.literal("!"), RuleExpr("spacing"))),
+        "QUESTION": ConcatExpr((RegexExpr.literal("?"), RuleExpr("spacing"))),
+        "STAR": ConcatExpr((RegexExpr.literal("*"), RuleExpr("spacing"))),
+        "PLUS": ConcatExpr((RegexExpr.literal("+"), RuleExpr("spacing"))),
+        "OPEN": ConcatExpr((RegexExpr.literal("("), RuleExpr("spacing"))),
+        "CLOSE": ConcatExpr((RegexExpr.literal(")"), RuleExpr("spacing"))),
+        "DOT": ConcatExpr((RegexExpr.literal("."), RuleExpr("spacing"))),
         "spacing": StarExpr(AltExpr((RuleExpr("space"), RuleExpr("comment")))),
         "comment": ConcatExpr(
             (
-                RegexExpr(re.compile(r"\#", re.DOTALL)),
+                RegexExpr.literal("#"),
                 StarExpr(
                     ConcatExpr(
-                        (
-                            LookaheadExpr(RuleExpr("end_of_line")),
-                            RegexExpr(re.compile(r".", re.DOTALL)),
-                        )
+                        (LookaheadExpr(RuleExpr("end_of_line")), RegexExpr(r"."),)
                     ),
                 ),
                 RuleExpr("end_of_line"),
             )
         ),
-        "space": AltExpr(
-            (RegexExpr(re.compile("[\\ \\\t]", re.DOTALL)), RuleExpr("end_of_line"))
-        ),
-        "end_of_line": RegexExpr(re.compile("\r\n|\n\r|\n|\r", re.DOTALL)),
-        "end_of_file": LookaheadExpr(RegexExpr(re.compile(r".", re.DOTALL))),
+        "space": AltExpr((RegexExpr("[\\ \\\t]"), RuleExpr("end_of_line"))),
+        "end_of_line": RegexExpr("\r\n|\n\r|\n|\r"),
+        "end_of_file": LookaheadExpr(RegexExpr(r".")),
     },
 )
 """

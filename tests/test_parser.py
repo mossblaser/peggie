@@ -102,6 +102,7 @@ class TestExpr:
     def test_regex_expr_constructor(self) -> None:
         assert RegexExpr("foo").pattern == re.compile("foo", re.DOTALL)
         assert RegexExpr(re.compile("foo")).pattern == re.compile("foo")
+        assert RegexExpr.literal("a+b").pattern == re.compile(r"a\+b", re.DOTALL)
 
     @pytest.mark.parametrize(
         "expr, exp_matches_empty",

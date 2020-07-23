@@ -22,6 +22,7 @@ from typing import (
     Sequence,
     Set,
     Tuple,
+    Type,
     TypeVar,
     Union,
 )
@@ -393,6 +394,9 @@ class RuleExpr(Expr):
         return super().is_well_formed(grammar, _visited_rules)
 
 
+RegexExprT = TypeVar("RegexExprT", bound="RegexExpr")
+
+
 @dataclass(frozen=True)
 class RegexExpr(Expr):
     """
@@ -414,6 +418,15 @@ class RegexExpr(Expr):
 
         object.__setattr__(self, "pattern", pattern)
         object.__setattr__(self, "indentation", indentation)
+
+    @classmethod
+    def literal(
+        cls: Type[RegexExprT],
+        text: str,
+        indentation: RelativeIndentation = RelativeIndentation.any,
+    ) -> RegexExprT:
+        """Return a :py:class:`RegexExpr` matching a string literal."""
+        return cls(re.escape(text), indentation)
 
     def iter_subexpressions(self, grammar: "Grammar") -> Iterable["Expr"]:
         return iter(())
